@@ -1,0 +1,171 @@
+import { useTheme } from '@/hooks/useThemeColor';
+import { ArrowUp, Mic, Paperclip } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+interface ChatInputProps {
+    onSendMessage: (message: string) => void;
+    onAttachPress?: () => void;
+    onMicPress?: () => void;
+    placeholder?: string;
+    isKeyboardVisible?: boolean;
+}
+
+export const ChatInput: React.FC<ChatInputProps> = ({
+    onSendMessage,
+    onAttachPress,
+    onMicPress,
+    placeholder = 'Ask Suna anything...',
+    isKeyboardVisible = false,
+}) => {
+    const [message, setMessage] = useState('');
+    const theme = useTheme();
+    const insets = useSafeAreaInsets();
+
+    // Debug keyboard visibility
+    console.log('ChatInput - isKeyboardVisible:', isKeyboardVisible, 'insets.bottom:', insets.bottom);
+
+    const handleSend = () => {
+        if (message.trim()) {
+            onSendMessage(message.trim());
+            setMessage('');
+        }
+    };
+
+    const containerStyle = [
+        styles.container,
+        {
+            backgroundColor: theme.sidebar,
+            borderTopLeftRadius: 30,
+            borderTopRightRadius: 30,
+            shadowColor: theme.border,
+            shadowOffset: {
+                width: 0,
+                height: -1,
+            },
+            shadowOpacity: 1,
+            shadowRadius: 0,
+            elevation: 0,
+            paddingBottom: isKeyboardVisible ? 10 : Math.max(insets.bottom, 20),
+        },
+    ];
+
+    return (
+        <View style={containerStyle}>
+            <View style={[styles.inputContainer, { backgroundColor: theme.sidebar }]}>
+                <TextInput
+                    style={[
+                        styles.textInput,
+                        {
+                            color: theme.foreground,
+                        },
+                    ]}
+                    value={message}
+                    onChangeText={setMessage}
+                    placeholder={placeholder}
+                    placeholderTextColor={theme.placeholderText}
+                    multiline
+                    maxLength={2000}
+                    returnKeyType="send"
+                    onSubmitEditing={handleSend}
+                    blurOnSubmit={false}
+                />
+
+                <View style={styles.buttonContainer}>
+                    <TouchableOpacity style={styles.actionButton} onPress={onAttachPress}>
+                        <Paperclip size={20} color={theme.placeholderText} />
+                    </TouchableOpacity>
+
+                    <View style={styles.rightButtons}>
+                        <TouchableOpacity style={styles.actionButton} onPress={onMicPress}>
+                            <Mic size={18} color={theme.placeholderText} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.sendButton, {
+                                backgroundColor: message.trim() ? theme.activeButton : theme.inactiveButton
+                            }]}
+                            onPress={handleSend}
+                            disabled={!message.trim()}
+                        >
+                            <ArrowUp
+                                size={19}
+                                strokeWidth={3}
+                                color={message.trim() ? theme.background : theme.disabledText}
+                            />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </View>
+    );
+};
+
+const styles = StyleSheet.create({
+    container: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    inputContainer: {
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    textInput: {
+        fontSize: 16,
+        maxHeight: 100,
+        backgroundColor: 'transparent',
+        marginBottom: 8,
+        ...Platform.select({
+            ios: {
+                paddingTop: 12,
+            },
+        }),
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    rightButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    actionButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    sendButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    attachIcon: {
+        width: 16,
+        height: 16,
+        borderRadius: 2,
+    },
+    micIcon: {
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+    },
+    sendIcon: {
+        width: 0,
+        height: 0,
+        borderStyle: 'solid',
+        borderLeftWidth: 14,
+        borderRightWidth: 0,
+        borderBottomWidth: 7,
+        borderTopWidth: 7,
+        borderTopColor: 'transparent',
+        borderBottomColor: 'transparent',
+    },
+}); 
