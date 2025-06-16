@@ -1,7 +1,15 @@
 import { useTheme } from '@/hooks/useThemeColor';
 import { ArrowUp, Mic, Paperclip } from 'lucide-react-native';
-import React, { useState } from 'react';
-import { Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Keyboard, KeyboardEvent, Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated, {
+    Easing,
+    Extrapolate,
+    interpolate,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ChatInputProps {
@@ -9,7 +17,6 @@ interface ChatInputProps {
     onAttachPress?: () => void;
     onMicPress?: () => void;
     placeholder?: string;
-    isKeyboardVisible?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -17,14 +24,49 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     onAttachPress,
     onMicPress,
     placeholder = 'Ask Suna anything...',
-    isKeyboardVisible = false,
 }) => {
     const [message, setMessage] = useState('');
     const theme = useTheme();
     const insets = useSafeAreaInsets();
 
-    // Debug keyboard visibility
-    console.log('ChatInput - isKeyboardVisible:', isKeyboardVisible, 'insets.bottom:', insets.bottom);
+    // Shared values for keyboard height and visibility
+    const keyboardHeight = useSharedValue(0);
+    const isKeyboardVisible = useSharedValue(0);
+
+    useEffect(() => {
+        const handleKeyboardShow = (event: KeyboardEvent) => {
+            keyboardHeight.value = withTiming(event.endCoordinates.height, {
+                duration: 250,
+                easing: Easing.out(Easing.quad),
+            });
+            isKeyboardVisible.value = withTiming(1, {
+                duration: 250,
+                easing: Easing.out(Easing.quad),
+            });
+        };
+
+        const handleKeyboardHide = () => {
+            keyboardHeight.value = withTiming(0, {
+                duration: 250,
+                easing: Easing.out(Easing.quad),
+            });
+            isKeyboardVisible.value = withTiming(0, {
+                duration: 250,
+                easing: Easing.out(Easing.quad),
+            });
+        };
+
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+        const showSubscription = Keyboard.addListener(showEvent, handleKeyboardShow);
+        const hideSubscription = Keyboard.addListener(hideEvent, handleKeyboardHide);
+
+        return () => {
+            showSubscription.remove();
+            hideSubscription.remove();
+        };
+    }, []);
 
     const handleSend = () => {
         if (message.trim()) {
@@ -33,34 +75,35 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         }
     };
 
-    const containerStyle = [
-        styles.container,
-        {
+    // Animated style for keyboard following and dynamic padding
+    const animatedStyle = useAnimatedStyle(() => {
+        // Dynamic padding that reduces when keyboard is visible
+        const paddingBottom = interpolate(
+            isKeyboardVisible.value,
+            [0, 1],
+            [Math.max(insets.bottom, 20), 10], // Full safe area when keyboard hidden, minimal when visible
+            Extrapolate.CLAMP
+        );
+
+        return {
+            transform: [{ translateY: -keyboardHeight.value }],
+            paddingBottom,
+        };
+    });
+
+    return (
+        <Animated.View style={[styles.container, {
             backgroundColor: theme.sidebar,
             borderTopLeftRadius: 30,
             borderTopRightRadius: 30,
             shadowColor: theme.border,
-            shadowOffset: {
-                width: 0,
-                height: -1,
-            },
+            shadowOffset: { width: 0, height: -1 },
             shadowOpacity: 1,
             shadowRadius: 0,
-            elevation: 0,
-            paddingBottom: isKeyboardVisible ? 10 : Math.max(insets.bottom, 20),
-        },
-    ];
-
-    return (
-        <View style={containerStyle}>
+        }, animatedStyle]}>
             <View style={[styles.inputContainer, { backgroundColor: theme.sidebar }]}>
                 <TextInput
-                    style={[
-                        styles.textInput,
-                        {
-                            color: theme.foreground,
-                        },
-                    ]}
+                    style={[styles.textInput, { color: theme.foreground }]}
                     value={message}
                     onChangeText={setMessage}
                     placeholder={placeholder}
@@ -98,7 +141,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     </View>
                 </View>
             </View>
-        </View>
+        </Animated.View>
     );
 };
 

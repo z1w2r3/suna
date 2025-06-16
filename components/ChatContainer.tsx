@@ -4,8 +4,8 @@ import {
     useSetIsGenerating,
     useUpdateChatState,
 } from '@/stores/ui-store';
-import React, { useEffect, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatInput } from './ChatInput';
 import { Message, MessageThread } from './MessageThread';
@@ -40,25 +40,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ sessionId }) => {
     // Use local state for mock data
     const [messages, setMessages] = useState<Message[]>(mockMessages);
     const [isLoading, setIsLoading] = useState(false);
-    const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
     const insets = useSafeAreaInsets();
-
-    // Keyboard visibility detection
-    useEffect(() => {
-        const keyboardShow = () => setIsKeyboardVisible(true);
-        const keyboardHide = () => setIsKeyboardVisible(false);
-
-        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-        const showSubscription = Keyboard.addListener(showEvent, keyboardShow);
-        const hideSubscription = Keyboard.addListener(hideEvent, keyboardHide);
-
-        return () => {
-            showSubscription?.remove();
-            hideSubscription?.remove();
-        };
-    }, []);
 
     // Zustand: Atomic selectors to prevent infinite loops
     const currentTool = useCurrentTool();
@@ -125,25 +107,20 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ sessionId }) => {
     const headerHeight = insets.top + 12 + 24 + 1;
 
     return (
-        <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={headerHeight}
-        >
+        <View style={styles.container}>
             <MessageThread
                 messages={messages}
                 sessionId={sessionId}
             />
             <ChatInput
                 onSendMessage={handleSendMessage}
-                isKeyboardVisible={isKeyboardVisible}
                 placeholder={
                     isGenerating
                         ? (currentTool ? `${currentTool.name} is working...` : 'Generating...')
                         : 'Type your message...'
                 }
             />
-        </KeyboardAvoidingView>
+        </View>
     );
 };
 

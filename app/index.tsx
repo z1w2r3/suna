@@ -2,22 +2,18 @@ import { ChatContainer } from '@/components/ChatContainer';
 import { ChatHeader } from '@/components/ChatHeader';
 import { PanelContainer } from '@/components/PanelContainer';
 import { useThemedStyles } from '@/hooks/useThemeColor';
-import { useLeftPanelVisible, useRightPanelVisible, useSetLeftPanelVisible, useSetRightPanelVisible, useToggleLeftPanel, useToggleRightPanel } from '@/stores/ui-store';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
     const [currentSessionId] = useState('default-session');
+    const [leftPanelVisible, setLeftPanelVisible] = useState(false);
+    const [rightPanelVisible, setRightPanelVisible] = useState(false);
     const insets = useSafeAreaInsets();
 
-    // Zustand panel state
-    const leftPanelVisible = useLeftPanelVisible();
-    const rightPanelVisible = useRightPanelVisible();
-    const setLeftPanelVisible = useSetLeftPanelVisible();
-    const setRightPanelVisible = useSetRightPanelVisible();
-    const toggleLeftPanel = useToggleLeftPanel();
-    const toggleRightPanel = useToggleRightPanel();
+    const toggleLeftPanel = () => setLeftPanelVisible(!leftPanelVisible);
+    const toggleRightPanel = () => setRightPanelVisible(!rightPanelVisible);
 
     const styles = useThemedStyles((theme) => ({
         container: {
