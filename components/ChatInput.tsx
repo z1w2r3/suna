@@ -117,12 +117,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
                 <View style={styles.buttonContainer}>
                     <TouchableOpacity style={styles.actionButton} onPress={onAttachPress}>
-                        <Paperclip size={20} color={theme.placeholderText} />
+                        <Paperclip size={20} strokeWidth={2} color={theme.placeholderText} />
                     </TouchableOpacity>
 
                     <View style={styles.rightButtons}>
                         <TouchableOpacity style={styles.actionButton} onPress={onMicPress}>
-                            <Mic size={18} color={theme.placeholderText} />
+                            <Mic size={20} strokeWidth={2} color={theme.placeholderText} style={{ marginRight: 10 }} />
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -147,7 +147,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 10,
         paddingVertical: 12,
     },
     inputContainer: {
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     actionButton: {
-        width: 44,
+        width: 22,
         height: 44,
         borderRadius: 22,
         justifyContent: 'center',
