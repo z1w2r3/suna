@@ -1,3 +1,4 @@
+import { usePanelTopOffset } from '@/constants/SafeArea';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import { X } from 'lucide-react-native';
 import React from 'react';
@@ -12,13 +13,14 @@ interface RightPanelProps {
 
 export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose }) => {
     const insets = useSafeAreaInsets();
+    const panelTopOffset = usePanelTopOffset();
 
     const styles = useThemedStyles((theme) => ({
         panel: {
             backgroundColor: theme.sidebar,
             flex: 1,
             height: '100%' as const,
-            paddingTop: insets.top,
+            paddingTop: panelTopOffset,
             paddingBottom: insets.bottom,
             paddingHorizontal: 20,
         },
@@ -55,7 +57,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose }) =>
     return (
         <View style={styles.panel}>
             <View style={styles.header}>
-                <H3 style={styles.title}>Settings</H3>
+                <H3 style={styles.title}>Tool</H3>
                 <TouchableOpacity style={styles.closeButton} onPress={onClose}>
                     <X size={16} color={styles.placeholderText.color} />
                 </TouchableOpacity>
@@ -63,7 +65,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose }) =>
 
             <View style={styles.content}>
                 <Body style={styles.placeholderText}>
-                    Settings content goes here...
+                    Tool content goes here...
                 </Body>
             </View>
         </View>

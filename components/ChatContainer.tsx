@@ -17,12 +17,6 @@ interface ChatContainerProps {
 // Mock data for development
 const mockMessages: Message[] = [
     {
-        id: '1',
-        text: 'Hello! How can I help you today?',
-        isUser: false,
-        timestamp: new Date(Date.now() - 60000),
-    },
-    {
         id: '2',
         text: 'Hi there! I need help with React Native development.',
         isUser: true,
@@ -127,6 +121,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ sessionId }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        marginTop: 30,
         backgroundColor: 'transparent',
     },
 }); 

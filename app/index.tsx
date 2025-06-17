@@ -1,6 +1,7 @@
 import { ChatContainer } from '@/components/ChatContainer';
 import { ChatHeader } from '@/components/ChatHeader';
 import { PanelContainer } from '@/components/PanelContainer';
+import { useHeaderHeight } from '@/constants/SafeArea';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import React, { useState } from 'react';
 import { View } from 'react-native';
@@ -11,6 +12,7 @@ export default function HomeScreen() {
     const [leftPanelVisible, setLeftPanelVisible] = useState(false);
     const [rightPanelVisible, setRightPanelVisible] = useState(false);
     const insets = useSafeAreaInsets();
+    const headerHeight = useHeaderHeight();
 
     const toggleLeftPanel = () => setLeftPanelVisible(!leftPanelVisible);
     const toggleRightPanel = () => setRightPanelVisible(!rightPanelVisible);
@@ -30,7 +32,7 @@ export default function HomeScreen() {
         },
         chatContainer: {
             flex: 1,
-            marginTop: insets.top + 12 + 24 + 1, // insets.top + paddingTop + paddingVertical + border
+            marginTop: headerHeight,
         },
     }));
 
