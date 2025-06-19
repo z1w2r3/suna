@@ -10,7 +10,6 @@ import { ActivityIndicator, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
-    const [currentSessionId] = useState('default-session');
     const [leftPanelVisible, setLeftPanelVisible] = useState(false);
     const [rightPanelVisible, setRightPanelVisible] = useState(false);
     const [authOverlayVisible, setAuthOverlayVisible] = useState(false);
@@ -84,7 +83,7 @@ export default function HomeScreen() {
                     />
                 </View>
                 <View style={styles.chatContainer}>
-                    <ChatContainer sessionId={currentSessionId} />
+                    <ChatContainer />
                 </View>
 
                 {/* Auth overlay for manual auth actions */}

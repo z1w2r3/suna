@@ -1,42 +1,69 @@
+import { Message } from '@/api/chat-api';
 import { useTheme } from '@/hooks/useThemeColor';
 import { useCurrentTool, useIsGenerating } from '@/stores/ui-store';
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { Body } from './Typography';
 
-export interface Message {
-    id: string;
-    text: string;
-    isUser: boolean;
-    timestamp: Date;
-}
-
 interface MessageItemProps {
     message: Message;
+    isStreaming?: boolean;
+    streamContent?: string;
 }
 
-const MessageItem = memo<MessageItemProps>(({ message }) => {
+const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamContent }) => {
     const theme = useTheme();
 
-    if (message.isUser) {
+    // Parse message content
+    const parsedContent = useMemo(() => {
+        try {
+            // Handle both string and object content
+            if (typeof message.content === 'string') {
+                try {
+                    const parsed = JSON.parse(message.content);
+                    return parsed.content || message.content;
+                } catch {
+                    return message.content;
+                }
+            } else if (typeof message.content === 'object' && message.content !== null) {
+                // If content is already an object, check for content property
+                return message.content.content || JSON.stringify(message.content);
+            }
+            return String(message.content);
+        } catch {
+            return String(message.content);
+        }
+    }, [message.content]);
+
+    // Determine if this is a user message
+    const isUser = message.type === 'user';
+
+    if (isUser) {
         // User messages with bubble
-        const bubbleColor = theme.messageBubble; // Pre-computed 10% opacity
+        const bubbleColor = theme.messageBubble;
 
         return (
             <View style={[styles.messageContainer, { alignSelf: 'flex-end' }]}>
                 <View style={[styles.messageBubble, { backgroundColor: bubbleColor }]}>
                     <Body style={[styles.messageText, { color: theme.userMessage }]}>
-                        {message.text}
+                        {parsedContent}
                     </Body>
                 </View>
             </View>
         );
     } else {
         // AI messages full width, no bubble
+        const displayContent = isStreaming ? streamContent : parsedContent;
+
         return (
             <View style={styles.aiMessageContainer}>
                 <Body style={[styles.aiMessageText, { color: theme.aiMessage }]}>
-                    {message.text}
+                    {displayContent}
+                    {isStreaming && (
+                        <Body style={[styles.streamingIndicator, { color: theme.mutedForeground }]}>
+                            ●
+                        </Body>
+                    )}
                 </Body>
             </View>
         );
@@ -47,38 +74,125 @@ MessageItem.displayName = 'MessageItem';
 
 interface MessageThreadProps {
     messages: Message[];
-    sessionId?: string; // For optimized queries
+    isGenerating?: boolean;
+    streamContent?: string;
+    streamError?: string | null;
 }
 
-export const MessageThread: React.FC<MessageThreadProps> = ({ messages, sessionId }) => {
+export const MessageThread: React.FC<MessageThreadProps> = ({
+    messages,
+    isGenerating = false,
+    streamContent = '',
+    streamError
+}) => {
     const theme = useTheme();
 
     // Zustand state for UI concerns
     const currentTool = useCurrentTool();
-    const isGenerating = useIsGenerating();
+    const isGeneratingFromStore = useIsGenerating();
 
-    const renderMessage = ({ item }: { item: Message }) => (
-        <MessageItem message={item} />
-    );
+    // Use prop or store value for generating state
+    const showGenerating = isGenerating || isGeneratingFromStore;
 
-    const keyExtractor = (item: Message) => item.id;
+    // Create display messages including streaming content
+    const displayMessages = useMemo(() => {
+        if (!showGenerating || !streamContent) {
+            return messages;
+        }
 
-    // Performance: Show generating indicator
-    const renderFooter = () => {
-        if (!isGenerating) return null;
+        // Check if we need to append streaming content to the last AI message
+        // or create a new streaming message
+        const lastMessage = messages[messages.length - 1];
+        const isLastMessageFromAI = lastMessage && lastMessage.type === 'assistant';
+
+        if (isLastMessageFromAI && streamContent) {
+            // Update the last AI message with streaming content
+            return [
+                ...messages.slice(0, -1),
+                {
+                    ...lastMessage,
+                    content: JSON.stringify({ content: streamContent }),
+                }
+            ];
+        } else if (streamContent) {
+            // Create a new streaming message
+            const streamingMessage: Message = {
+                message_id: 'streaming-temp',
+                thread_id: messages[0]?.thread_id || '',
+                type: 'assistant',
+                is_llm_message: true,
+                content: JSON.stringify({ content: streamContent }),
+                metadata: {},
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            };
+            return [...messages, streamingMessage];
+        }
+
+        return messages;
+    }, [messages, streamContent, showGenerating]);
+
+    const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+        const isLastMessage = index === displayMessages.length - 1;
+        const isStreamingMessage = item.message_id === 'streaming-temp';
 
         return (
-            <View style={styles.generatingContainer}>
-                <Body style={[styles.generatingText, { color: theme.placeholderText, backgroundColor: theme.background }]}>
-                    {currentTool ? `${currentTool.name} is thinking...` : 'Generating response...'}
-                </Body>
-            </View>
+            <MessageItem
+                message={item}
+                isStreaming={isStreamingMessage && showGenerating}
+                streamContent={isStreamingMessage ? streamContent : undefined}
+            />
         );
     };
 
+    const keyExtractor = (item: Message) => item.message_id;
+
+    // Performance: Show generating indicator
+    const renderFooter = () => {
+        if (!showGenerating) return null;
+
+        if (streamError) {
+            return (
+                <View style={styles.errorContainer}>
+                    <Body style={[styles.errorText, { color: theme.destructive }]}>
+                        Error: {streamError}
+                    </Body>
+                </View>
+            );
+        }
+
+        // Only show generating indicator if we don't have streaming content
+        if (!streamContent) {
+            return (
+                <View style={styles.generatingContainer}>
+                    <Body style={[styles.generatingText, { color: theme.placeholderText }]}>
+                        {currentTool ? `${currentTool.name} is thinking...` : 'Generating response...'}
+                    </Body>
+                </View>
+            );
+        }
+
+        return null;
+    };
+
+    if (messages.length === 0 && !showGenerating) {
+        return (
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
+                <View style={styles.emptyContainer}>
+                    <Body style={[styles.emptyText, { color: theme.mutedForeground }]}>
+                        This is the beginning of your conversation.
+                    </Body>
+                    <Body style={[styles.emptyText, { color: theme.mutedForeground, fontSize: 14, marginTop: 8, opacity: 0.7 }]}>
+                        Send a message to get started!
+                    </Body>
+                </View>
+            </View>
+        );
+    }
+
     return (
         <FlatList
-            data={messages}
+            data={displayMessages}
             renderItem={renderMessage}
             keyExtractor={keyExtractor}
             style={[styles.container, { backgroundColor: theme.background }]}
@@ -131,6 +245,11 @@ const styles = StyleSheet.create({
         lineHeight: 20,
         paddingVertical: 8,
     },
+    streamingIndicator: {
+        fontSize: 12,
+        marginLeft: 4,
+        opacity: 0.7,
+    },
     generatingContainer: {
         paddingVertical: 12,
         paddingHorizontal: 16,
@@ -139,5 +258,25 @@ const styles = StyleSheet.create({
     generatingText: {
         fontStyle: 'italic',
         fontSize: 14,
+    },
+    errorContainer: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        alignItems: 'center',
+    },
+    errorText: {
+        fontSize: 14,
+        textAlign: 'center',
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 32,
+    },
+    emptyText: {
+        fontSize: 16,
+        textAlign: 'center',
+        fontStyle: 'italic',
     },
 }); 

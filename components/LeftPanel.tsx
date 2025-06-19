@@ -2,6 +2,7 @@ import { useProjects } from '@/api/project-api';
 import { fontWeights } from '@/constants/Fonts';
 import { usePanelTopOffset } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
+import { useChatContext } from '@/hooks/useChatContext';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import { Bot, SquarePen, Store } from 'lucide-react-native';
 import React from 'react';
@@ -23,6 +24,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
 
     // Use auth context
     const { user, signOut } = useAuth();
+
+    // Use chat context
+    const { selectedProject, setSelectedProject } = useChatContext();
 
     const styles = useThemedStyles((theme) => ({
         panel: {
@@ -207,6 +211,13 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             fontFamily: fontWeights[500],
             textAlign: 'center' as const,
         },
+        selectedTaskItem: {
+            backgroundColor: theme.primary,
+        },
+        selectedTaskText: {
+            color: theme.background,
+            fontFamily: fontWeights[600],
+        },
     }));
 
     if (!isVisible) return null;
@@ -241,8 +252,20 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
         }
 
         return projects.map((project) => (
-            <TouchableOpacity key={project.id} style={styles.taskItem}>
-                <Body style={styles.taskText}>{project.name}</Body>
+            <TouchableOpacity
+                key={project.id}
+                style={[
+                    styles.taskItem,
+                    selectedProject?.id === project.id && styles.selectedTaskItem
+                ]}
+                onPress={() => handleProjectSelect(project)}
+            >
+                <Body style={[
+                    styles.taskText,
+                    selectedProject?.id === project.id && styles.selectedTaskText
+                ]}>
+                    {project.name}
+                </Body>
             </TouchableOpacity>
         ));
     };
@@ -254,6 +277,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
         } catch (error) {
             console.error('Error signing out:', error);
         }
+    };
+
+    const handleProjectSelect = (project: any) => {
+        setSelectedProject(project);
+        onClose(); // Close the panel after selection
     };
 
     // Get user display info
