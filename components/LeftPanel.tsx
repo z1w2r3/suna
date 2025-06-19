@@ -1,9 +1,11 @@
+import { useProjects } from '@/api/project-api';
 import { fontWeights } from '@/constants/Fonts';
 import { usePanelTopOffset } from '@/constants/SafeArea';
+import { useAuth } from '@/hooks/useAuth';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import { Bot, SquarePen, Store } from 'lucide-react-native';
 import React from 'react';
-import { ScrollView, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Body, Caption, H3 } from './Typography';
 
@@ -15,6 +17,12 @@ interface LeftPanelProps {
 export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     const insets = useSafeAreaInsets();
     const panelTopOffset = usePanelTopOffset();
+
+    // Use React Query to fetch projects
+    const { data: projects = [], isLoading, error } = useProjects();
+
+    // Use auth context
+    const { user, signOut } = useAuth();
 
     const styles = useThemedStyles((theme) => ({
         panel: {
@@ -165,18 +173,99 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             fontSize: 12,
             marginTop: 1,
         },
+        loadingContainer: {
+            flex: 1,
+            justifyContent: 'center' as const,
+            alignItems: 'center' as const,
+            paddingVertical: 20,
+        },
+        errorText: {
+            color: theme.destructive,
+            fontSize: 14,
+            textAlign: 'center' as const,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+        },
+        emptyText: {
+            color: theme.mutedForeground,
+            fontSize: 14,
+            textAlign: 'center' as const,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            fontStyle: 'italic' as const,
+        },
+        signOutButton: {
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            borderRadius: 6,
+            backgroundColor: theme.mutedWithOpacity(0.1),
+            marginTop: 8,
+        },
+        signOutText: {
+            color: theme.destructive,
+            fontSize: 13,
+            fontFamily: fontWeights[500],
+            textAlign: 'center' as const,
+        },
     }));
 
     if (!isVisible) return null;
 
-    const mockTasks = [
-        'File Review Request',
-        'PDF Text Extraction',
-        'Hello!',
-        'HTML Page Deployment',
-        'LinkedIn Search Vukasin',
-        'Simple Todo File'
-    ];
+    // Render tasks section with real project data
+    const renderTasksSection = () => {
+        if (isLoading) {
+            return (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color={styles.sectionText.color} />
+                    <Caption style={[styles.sectionText, { marginTop: 8, opacity: 0.7 }]}>
+                        Loading projects...
+                    </Caption>
+                </View>
+            );
+        }
+
+        if (error) {
+            return (
+                <Body style={styles.errorText}>
+                    Failed to load projects. Please try again.
+                </Body>
+            );
+        }
+
+        if (projects.length === 0) {
+            return (
+                <Body style={styles.emptyText}>
+                    No projects found. Create your first project to get started.
+                </Body>
+            );
+        }
+
+        return projects.map((project) => (
+            <TouchableOpacity key={project.id} style={styles.taskItem}>
+                <Body style={styles.taskText}>{project.name}</Body>
+            </TouchableOpacity>
+        ));
+    };
+
+    const handleSignOut = async () => {
+        try {
+            await signOut();
+            onClose();
+        } catch (error) {
+            console.error('Error signing out:', error);
+        }
+    };
+
+    // Get user display info
+    const getUserDisplayName = () => {
+        if (!user?.email) return 'User';
+        return user.email.split('@')[0];
+    };
+
+    const getUserInitial = () => {
+        const name = getUserDisplayName();
+        return name.charAt(0).toUpperCase();
+    };
 
     return (
         <View style={styles.panel}>
@@ -210,17 +299,13 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                     </View>
                 </TouchableOpacity>
 
-                {/* Tasks */}
+                {/* Projects (previously Tasks) */}
                 <View style={styles.section}>
                     <View style={styles.tasksHeader}>
-                        <Caption style={styles.tasksTitle}>Tasks</Caption>
+                        <Caption style={styles.tasksTitle}>Projects</Caption>
                     </View>
 
-                    {mockTasks.map((task, index) => (
-                        <TouchableOpacity key={index} style={styles.taskItem}>
-                            <Body style={styles.taskText}>{task}</Body>
-                        </TouchableOpacity>
-                    ))}
+                    {renderTasksSection()}
                 </View>
             </ScrollView>
 
@@ -228,12 +313,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             <View style={styles.userSection}>
                 <TouchableOpacity style={styles.userInfo}>
                     <View style={styles.userAvatar}>
-                        <Caption style={styles.userInitial}>V</Caption>
+                        <Caption style={styles.userInitial}>{getUserInitial()}</Caption>
                     </View>
                     <View style={styles.userDetails}>
-                        <Body style={styles.userName}>vukasinkubet+1</Body>
-                        <Caption style={styles.userEmail}>vukasinkubet+1@gmail.com</Caption>
+                        <Body style={styles.userName}>{getUserDisplayName()}</Body>
+                        <Caption style={styles.userEmail}>{user?.email || 'No email'}</Caption>
                     </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+                    <Caption style={styles.signOutText}>Sign Out</Caption>
                 </TouchableOpacity>
             </View>
         </View>
