@@ -72,11 +72,11 @@ export const PanelContainer: React.FC<PanelContainerProps> = ({
         <View style={styles.container}>
             <DrawerLayout
                 ref={leftDrawerRef}
-                drawerWidth={280}
+                drawerWidth={300}
                 drawerPosition="left"
                 drawerType="slide"
                 drawerBackgroundColor="transparent"
-                edgeWidth={60}
+                edgeWidth={75}
                 renderNavigationView={() => leftDrawerContent}
                 onDrawerSlide={(position) => {
                     // Tiny overlay effect on main content

@@ -2,11 +2,13 @@ import { AuthOverlay } from '@/components/AuthOverlay';
 import { ChatContainer } from '@/components/ChatContainer';
 import { ChatHeader } from '@/components/ChatHeader';
 import { PanelContainer } from '@/components/PanelContainer';
+import { Skeleton } from '@/components/Skeleton';
+import { commonStyles } from '@/constants/CommonStyles';
 import { useHeaderHeight } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import React, { useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
@@ -39,9 +41,7 @@ export default function HomeScreen() {
             marginTop: headerHeight,
         },
         loadingContainer: {
-            flex: 1,
-            justifyContent: 'center' as const,
-            alignItems: 'center' as const,
+            ...commonStyles.flexCenter,
             backgroundColor: theme.background,
         },
     }));
@@ -50,7 +50,8 @@ export default function HomeScreen() {
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={styles.container.backgroundColor} />
+                <Skeleton width={200} height={20} />
+                <Skeleton width={150} height={16} style={{ marginTop: 12 }} />
             </View>
         );
     }

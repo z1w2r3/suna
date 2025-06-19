@@ -6,8 +6,9 @@ import { useChatContext } from '@/hooks/useChatContext';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import { Bot, SquarePen, Store } from 'lucide-react-native';
 import React from 'react';
-import { ActivityIndicator, ScrollView, TouchableOpacity, View } from 'react-native';
+import { ScrollView, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SkeletonProjects } from './Skeleton';
 import { Body, Caption, H3 } from './Typography';
 
 interface LeftPanelProps {
@@ -31,7 +32,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     const styles = useThemedStyles((theme) => ({
         panel: {
             backgroundColor: theme.sidebar,
-            width: 280,
+            width: 300,
             height: '100%' as const,
             paddingTop: panelTopOffset,
             paddingBottom: insets.bottom,
@@ -56,7 +57,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
         },
         scrollContent: {
             flex: 1,
-            paddingHorizontal: 18,
+            paddingHorizontal: 22,
         },
         section: {
             marginTop: 24,
@@ -74,10 +75,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             alignItems: 'center' as const,
             justifyContent: 'space-between' as const,
             paddingVertical: 12,
-            paddingHorizontal: 16,
             borderRadius: 10,
             marginBottom: 8,
-            backgroundColor: theme.mutedWithOpacity(0.05),
         },
         sectionItemLeft: {
             flexDirection: 'row' as const,
@@ -129,6 +128,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             paddingVertical: 10,
             borderRadius: 6,
             marginBottom: 4,
+            marginLeft: -12,
+            marginRight: -12,
         },
         taskIcon: {
             marginRight: 12,
@@ -136,7 +137,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
         },
         taskText: {
             color: theme.foreground,
+            marginHorizontal: 12,
             fontSize: 15,
+            fontFamily: fontWeights[500],
         },
         userSection: {
             marginTop: 'auto' as const,
@@ -177,12 +180,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             fontSize: 12,
             marginTop: 1,
         },
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center' as const,
-            alignItems: 'center' as const,
-            paddingVertical: 20,
-        },
         errorText: {
             color: theme.destructive,
             fontSize: 14,
@@ -212,11 +209,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             textAlign: 'center' as const,
         },
         selectedTaskItem: {
-            backgroundColor: theme.primary,
+            backgroundColor: theme.mutedWithOpacity(0.1),
+            borderRadius: 12,
         },
         selectedTaskText: {
-            color: theme.background,
-            fontFamily: fontWeights[600],
+            color: theme.foreground,
         },
     }));
 
@@ -225,14 +222,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     // Render tasks section with real project data
     const renderTasksSection = () => {
         if (isLoading) {
-            return (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color={styles.sectionText.color} />
-                    <Caption style={[styles.sectionText, { marginTop: 8, opacity: 0.7 }]}>
-                        Loading projects...
-                    </Caption>
-                </View>
-            );
+            return <SkeletonProjects count={3} />;
         }
 
         if (error) {
@@ -330,7 +320,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                 {/* Projects (previously Tasks) */}
                 <View style={styles.section}>
                     <View style={styles.tasksHeader}>
-                        <Caption style={styles.tasksTitle}>Projects</Caption>
+                        <Caption style={styles.tasksTitle}>Tasks</Caption>
                     </View>
 
                     {renderTasksSection()}

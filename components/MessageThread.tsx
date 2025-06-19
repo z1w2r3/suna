@@ -1,8 +1,10 @@
 import { Message } from '@/api/chat-api';
+import { commonStyles } from '@/constants/CommonStyles';
 import { useTheme } from '@/hooks/useThemeColor';
 import { useCurrentTool, useIsGenerating } from '@/stores/ui-store';
 import React, { memo, useMemo } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
+import { SkeletonChatMessages } from './Skeleton';
 import { Body } from './Typography';
 
 interface MessageItemProps {
@@ -77,13 +79,15 @@ interface MessageThreadProps {
     isGenerating?: boolean;
     streamContent?: string;
     streamError?: string | null;
+    isLoadingMessages?: boolean;
 }
 
 export const MessageThread: React.FC<MessageThreadProps> = ({
     messages,
     isGenerating = false,
     streamContent = '',
-    streamError
+    streamError,
+    isLoadingMessages = false,
 }) => {
     const theme = useTheme();
 
@@ -175,6 +179,15 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         return null;
     };
 
+    // Show skeleton loading when messages are being fetched
+    if (isLoadingMessages && messages.length === 0) {
+        return (
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
+                <SkeletonChatMessages />
+            </View>
+        );
+    }
+
     if (messages.length === 0 && !showGenerating) {
         return (
             <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -228,11 +241,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderRadius: 16,
-        elevation: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
+        ...commonStyles.shadow,
     },
     messageText: {
         lineHeight: 20,
@@ -253,7 +262,7 @@ const styles = StyleSheet.create({
     generatingContainer: {
         paddingVertical: 12,
         paddingHorizontal: 16,
-        alignItems: 'center',
+        ...commonStyles.centerContainer,
     },
     generatingText: {
         fontStyle: 'italic',
@@ -262,16 +271,14 @@ const styles = StyleSheet.create({
     errorContainer: {
         paddingVertical: 12,
         paddingHorizontal: 16,
-        alignItems: 'center',
+        ...commonStyles.centerContainer,
     },
     errorText: {
         fontSize: 14,
         textAlign: 'center',
     },
     emptyContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
+        ...commonStyles.flexCenter,
         paddingHorizontal: 32,
     },
     emptyText: {

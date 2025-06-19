@@ -1,3 +1,4 @@
+import { commonStyles } from '@/constants/CommonStyles';
 import { useChatContext } from '@/hooks/useChatContext';
 import { useChatSession } from '@/hooks/useChatHooks';
 import { useThemedStyles } from '@/hooks/useThemeColor';
@@ -5,6 +6,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { ChatInput } from './ChatInput';
 import { MessageThread } from './MessageThread';
+import { SkeletonText } from './Skeleton';
 import { Body } from './Typography';
 
 interface ChatContainerProps {
@@ -18,6 +20,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
         thread,
         messages,
         isLoading,
+        isLoadingThread,
+        isLoadingMessages,
         sendMessage,
         stopAgent,
         isGenerating,
@@ -32,19 +36,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
             backgroundColor: theme.background,
         },
         loadingContainer: {
-            flex: 1,
-            justifyContent: 'center' as const,
-            alignItems: 'center' as const,
+            ...commonStyles.flexCenter,
             backgroundColor: theme.background,
-        },
-        loadingText: {
-            color: theme.mutedForeground,
-            fontSize: 16,
+            paddingHorizontal: 32,
         },
         emptyContainer: {
-            flex: 1,
-            justifyContent: 'center' as const,
-            alignItems: 'center' as const,
+            ...commonStyles.flexCenter,
             backgroundColor: theme.background,
             paddingHorizontal: 32,
         },
@@ -68,10 +65,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
     }));
 
     // Show loading state while thread is being fetched (NOT created)
-    if (selectedProject && isLoading) {
+    if (selectedProject && isLoadingThread) {
         return (
             <View style={styles.loadingContainer}>
-                <Body style={styles.loadingText}>Loading conversation...</Body>
+                <SkeletonText lines={3} />
             </View>
         );
     }
@@ -80,17 +77,14 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
     if (!selectedProject) {
         return (
             <View style={styles.emptyContainer}>
-                <Body style={styles.emptyText}>
-                    Select a project from the sidebar to start chatting
-                </Body>
+                <Body style={styles.emptyText}>Select a project to start chatting</Body>
                 <Body style={styles.emptySubtext}>
-                    Your conversations will appear here
+                    Choose a project from the sidebar to begin your conversation.
                 </Body>
             </View>
         );
     }
 
-    // Project is selected - show chat interface (thread will be created when user sends first message)
     return (
         <View style={styles.container}>
             <View style={styles.chatContent}>
@@ -99,11 +93,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                     isGenerating={isGenerating}
                     streamContent={streamContent}
                     streamError={streamError}
+                    isLoadingMessages={isLoadingMessages}
                 />
             </View>
-
             <ChatInput
-                onSendMessage={sendMessage}
+                onSendMessage={(content: string) => {
+                    sendMessage(content);
+                }}
                 placeholder={
                     isGenerating
                         ? "AI is responding..."

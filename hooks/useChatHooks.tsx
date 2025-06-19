@@ -364,6 +364,8 @@ export const useChatSession = (projectId: string) => {
         thread,
         messages,
         isLoading: threadLoading || messagesLoading,
+        isLoadingThread: threadLoading,
+        isLoadingMessages: messagesLoading,
         sendMessage,
         stopAgent,
         isGenerating: agentStream.isStreaming,
