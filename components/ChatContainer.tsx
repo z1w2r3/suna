@@ -2,8 +2,8 @@ import { commonStyles } from '@/constants/CommonStyles';
 import { useChatContext } from '@/hooks/useChatContext';
 import { useChatSession } from '@/hooks/useChatHooks';
 import { useThemedStyles } from '@/hooks/useThemeColor';
-import React from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Keyboard, KeyboardEvent, Platform, View } from 'react-native';
 import { ChatInput } from './ChatInput';
 import { MessageThread } from './MessageThread';
 import { SkeletonText } from './Skeleton';
@@ -15,6 +15,8 @@ interface ChatContainerProps {
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
     const { selectedProject } = useChatContext();
+    const [isAtBottomOfChat, setIsAtBottomOfChat] = useState(true);
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     const {
         thread,
@@ -29,6 +31,28 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
         streamError,
         isSending,
     } = useChatSession(selectedProject?.id || '');
+
+    // Track keyboard height for MessageThread padding
+    useEffect(() => {
+        const handleKeyboardShow = (event: KeyboardEvent) => {
+            setKeyboardHeight(event.endCoordinates.height);
+        };
+
+        const handleKeyboardHide = () => {
+            setKeyboardHeight(0);
+        };
+
+        const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+        const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+        const showSubscription = Keyboard.addListener(showEvent, handleKeyboardShow);
+        const hideSubscription = Keyboard.addListener(hideEvent, handleKeyboardHide);
+
+        return () => {
+            showSubscription.remove();
+            hideSubscription.remove();
+        };
+    }, []);
 
     const styles = useThemedStyles((theme) => ({
         container: {
@@ -64,6 +88,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
         },
     }));
 
+    const handleScrollPositionChange = (isAtBottom: boolean) => {
+        setIsAtBottomOfChat(isAtBottom);
+    };
+
     // Show loading state while thread is being fetched (NOT created)
     if (selectedProject && isLoadingThread) {
         return (
@@ -94,6 +122,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                     streamContent={streamContent}
                     streamError={streamError}
                     isLoadingMessages={isLoadingMessages}
+                    onScrollPositionChange={handleScrollPositionChange}
+                    keyboardHeight={keyboardHeight}
                 />
             </View>
             <ChatInput
@@ -107,6 +137,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                             ? "Sending..."
                             : `Chat with ${selectedProject.name}...`
                 }
+                isAtBottomOfChat={isAtBottomOfChat}
             />
         </View>
     );

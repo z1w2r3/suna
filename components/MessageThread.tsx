@@ -2,7 +2,7 @@ import { Message } from '@/api/chat-api';
 import { commonStyles } from '@/constants/CommonStyles';
 import { useTheme } from '@/hooks/useThemeColor';
 import { useCurrentTool, useIsGenerating } from '@/stores/ui-store';
-import React, { memo, useMemo } from 'react';
+import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 import { SkeletonChatMessages } from './Skeleton';
 import { Body } from './Typography';
@@ -16,10 +16,8 @@ interface MessageItemProps {
 const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamContent }) => {
     const theme = useTheme();
 
-    // Parse message content
     const parsedContent = useMemo(() => {
         try {
-            // Handle both string and object content
             if (typeof message.content === 'string') {
                 try {
                     const parsed = JSON.parse(message.content);
@@ -28,7 +26,6 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
                     return message.content;
                 }
             } else if (typeof message.content === 'object' && message.content !== null) {
-                // If content is already an object, check for content property
                 return message.content.content || JSON.stringify(message.content);
             }
             return String(message.content);
@@ -37,11 +34,9 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
         }
     }, [message.content]);
 
-    // Determine if this is a user message
     const isUser = message.type === 'user';
 
     if (isUser) {
-        // User messages with bubble
         const bubbleColor = theme.messageBubble;
 
         return (
@@ -80,6 +75,8 @@ interface MessageThreadProps {
     streamContent?: string;
     streamError?: string | null;
     isLoadingMessages?: boolean;
+    onScrollPositionChange?: (isAtBottom: boolean) => void;
+    keyboardHeight?: number;
 }
 
 export const MessageThread: React.FC<MessageThreadProps> = ({
@@ -88,29 +85,41 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     streamContent = '',
     streamError,
     isLoadingMessages = false,
+    onScrollPositionChange,
+    keyboardHeight = 0,
 }) => {
     const theme = useTheme();
+    const flatListRef = useRef<FlatList>(null);
+    const [isAtBottom, setIsAtBottom] = useState(true);
+    const currentScrollOffset = useRef(0);
+    const isFirstLoad = useRef(true);
 
-    // Zustand state for UI concerns
     const currentTool = useCurrentTool();
     const isGeneratingFromStore = useIsGenerating();
 
-    // Use prop or store value for generating state
     const showGenerating = isGenerating || isGeneratingFromStore;
 
-    // Create display messages including streaming content
+    const handleScroll = useCallback((event: any) => {
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+        currentScrollOffset.current = contentOffset.y;
+
+        const isScrolledToBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 50;
+
+        if (isScrolledToBottom !== isAtBottom) {
+            setIsAtBottom(isScrolledToBottom);
+            onScrollPositionChange?.(isScrolledToBottom);
+        }
+    }, [isAtBottom, onScrollPositionChange]);
+
     const displayMessages = useMemo(() => {
         if (!showGenerating || !streamContent) {
             return messages;
         }
 
-        // Check if we need to append streaming content to the last AI message
-        // or create a new streaming message
         const lastMessage = messages[messages.length - 1];
         const isLastMessageFromAI = lastMessage && lastMessage.type === 'assistant';
 
         if (isLastMessageFromAI && streamContent) {
-            // Update the last AI message with streaming content
             return [
                 ...messages.slice(0, -1),
                 {
@@ -119,7 +128,6 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                 }
             ];
         } else if (streamContent) {
-            // Create a new streaming message
             const streamingMessage: Message = {
                 message_id: 'streaming-temp',
                 thread_id: messages[0]?.thread_id || '',
@@ -136,6 +144,43 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         return messages;
     }, [messages, streamContent, showGenerating]);
 
+
+
+    const handleContentSizeChange = useCallback(() => {
+        if (isAtBottom && flatListRef.current) {
+            flatListRef.current.scrollToEnd({ animated: false });
+        }
+        if (isFirstLoad.current && messages.length > 0 && flatListRef.current) {
+            setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: false });
+                setIsAtBottom(true);
+            }, 10);
+        }
+    }, [isAtBottom, messages.length]);
+
+    React.useEffect(() => {
+        if (isAtBottom && keyboardHeight > 0 && flatListRef.current) {
+            setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+            }, 150);
+        } else if (isAtBottom && keyboardHeight === 0 && flatListRef.current) {
+            setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+            }, 150);
+        }
+    }, [keyboardHeight, isAtBottom]);
+
+    React.useEffect(() => {
+        if (messages.length > 0 && flatListRef.current) {
+            const delay = isFirstLoad.current ? 200 : 50;
+            setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: false });
+                setIsAtBottom(true);
+                isFirstLoad.current = false;
+            }, delay);
+        }
+    }, [messages, messages[0]?.thread_id, isLoadingMessages]);
+
     const renderMessage = ({ item, index }: { item: Message; index: number }) => {
         const isLastMessage = index === displayMessages.length - 1;
         const isStreamingMessage = item.message_id === 'streaming-temp';
@@ -151,7 +196,6 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
     const keyExtractor = (item: Message) => item.message_id;
 
-    // Performance: Show generating indicator
     const renderFooter = () => {
         if (!showGenerating) return null;
 
@@ -165,7 +209,6 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             );
         }
 
-        // Only show generating indicator if we don't have streaming content
         if (!streamContent) {
             return (
                 <View style={styles.generatingContainer}>
@@ -179,7 +222,6 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         return null;
     };
 
-    // Show skeleton loading when messages are being fetched
     if (isLoadingMessages && messages.length === 0) {
         return (
             <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -205,6 +247,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
     return (
         <FlatList
+            ref={flatListRef}
             data={displayMessages}
             renderItem={renderMessage}
             keyExtractor={keyExtractor}
@@ -215,11 +258,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             maxToRenderPerBatch={10}
             windowSize={10}
             ListFooterComponent={renderFooter}
-            // Auto-scroll to bottom for new messages
-            maintainVisibleContentPosition={{
-                minIndexForVisible: 0,
-                autoscrollToTopThreshold: 100,
-            }}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            onContentSizeChange={handleContentSizeChange}
         />
     );
 };
@@ -227,10 +268,11 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        paddingBottom: 20,
     },
     content: {
         padding: 16,
-        paddingBottom: 8,
+        paddingBottom: 0,
         flexGrow: 1,
     },
     messageContainer: {
@@ -286,4 +328,4 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         fontStyle: 'italic',
     },
-}); 
+});

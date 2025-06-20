@@ -17,6 +17,7 @@ interface ChatInputProps {
     onAttachPress?: () => void;
     onMicPress?: () => void;
     placeholder?: string;
+    isAtBottomOfChat?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -24,14 +25,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     onAttachPress,
     onMicPress,
     placeholder = 'Ask Suna anything...',
+    isAtBottomOfChat = true,
 }) => {
     const [message, setMessage] = useState('');
     const theme = useTheme();
     const insets = useSafeAreaInsets();
 
-    // Shared values for keyboard height and visibility
     const keyboardHeight = useSharedValue(0);
-    const isKeyboardVisible = useSharedValue(0);
 
     useEffect(() => {
         const handleKeyboardShow = (event: KeyboardEvent) => {
@@ -39,18 +39,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 duration: 250,
                 easing: Easing.out(Easing.quad),
             });
-            isKeyboardVisible.value = withTiming(1, {
-                duration: 250,
-                easing: Easing.out(Easing.quad),
-            });
         };
 
         const handleKeyboardHide = () => {
             keyboardHeight.value = withTiming(0, {
-                duration: 250,
-                easing: Easing.out(Easing.quad),
-            });
-            isKeyboardVisible.value = withTiming(0, {
                 duration: 250,
                 easing: Easing.out(Easing.quad),
             });
@@ -75,73 +67,84 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         }
     };
 
-    // Animated style for keyboard following and dynamic padding
-    const animatedStyle = useAnimatedStyle(() => {
-        // Dynamic padding that reduces when keyboard is visible
+    const containerStyle = useAnimatedStyle(() => {
         const paddingBottom = interpolate(
-            isKeyboardVisible.value,
-            [0, 1],
-            [Math.max(insets.bottom, 20), 10], // Full safe area when keyboard hidden, minimal when visible
+            keyboardHeight.value,
+            [0, 300],
+            [Math.max(insets.bottom, 20), 10],
             Extrapolate.CLAMP
         );
 
         return {
-            transform: [{ translateY: -keyboardHeight.value }],
             paddingBottom,
         };
     });
 
+    const fakeViewStyle = useAnimatedStyle(() => {
+        return {
+            height: keyboardHeight.value,
+        };
+    });
+
     return (
-        <Animated.View style={[styles.container, {
-            backgroundColor: theme.sidebar,
-            borderTopLeftRadius: 30,
-            borderTopRightRadius: 30,
-            shadowColor: theme.border,
-            shadowOffset: { width: 0, height: -1 },
-            shadowOpacity: 1,
-            shadowRadius: 0,
-        }, animatedStyle]}>
-            <View style={[styles.inputContainer, { backgroundColor: theme.sidebar }]}>
-                <TextInput
-                    style={[styles.textInput, { color: theme.foreground }]}
-                    value={message}
-                    onChangeText={setMessage}
-                    placeholder={placeholder}
-                    placeholderTextColor={theme.placeholderText}
-                    multiline
-                    maxLength={2000}
-                    returnKeyType="send"
-                    onSubmitEditing={handleSend}
-                    blurOnSubmit={false}
-                />
+        <>
+            <Animated.View style={[
+                styles.container,
+                {
+                    backgroundColor: theme.sidebar,
+                    borderTopLeftRadius: 30,
+                    borderTopRightRadius: 30,
+                    shadowColor: theme.border,
+                    shadowOffset: { width: 0, height: -1 },
+                    shadowOpacity: 1,
+                    shadowRadius: 0,
+                },
+                containerStyle
+            ]}>
+                <View style={[styles.inputContainer, { backgroundColor: theme.sidebar }]}>
+                    <TextInput
+                        style={[styles.textInput, { color: theme.foreground }]}
+                        value={message}
+                        onChangeText={setMessage}
+                        placeholder={placeholder}
+                        placeholderTextColor={theme.placeholderText}
+                        multiline
+                        maxLength={2000}
+                        returnKeyType="send"
+                        onSubmitEditing={handleSend}
+                        blurOnSubmit={false}
+                    />
 
-                <View style={styles.buttonContainer}>
-                    <TouchableOpacity style={styles.actionButton} onPress={onAttachPress}>
-                        <Paperclip size={20} strokeWidth={2} color={theme.placeholderText} />
-                    </TouchableOpacity>
-
-                    <View style={styles.rightButtons}>
-                        <TouchableOpacity style={styles.actionButton} onPress={onMicPress}>
-                            <Mic size={20} strokeWidth={2} color={theme.placeholderText} style={{ marginRight: 10 }} />
+                    <View style={styles.buttonContainer}>
+                        <TouchableOpacity style={styles.actionButton} onPress={onAttachPress}>
+                            <Paperclip size={20} strokeWidth={2} color={theme.placeholderText} />
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.sendButton, {
-                                backgroundColor: message.trim() ? theme.activeButton : theme.inactiveButton
-                            }]}
-                            onPress={handleSend}
-                            disabled={!message.trim()}
-                        >
-                            <ArrowUp
-                                size={19}
-                                strokeWidth={3}
-                                color={message.trim() ? theme.background : theme.disabledText}
-                            />
-                        </TouchableOpacity>
+                        <View style={styles.rightButtons}>
+                            <TouchableOpacity style={styles.actionButton} onPress={onMicPress}>
+                                <Mic size={20} strokeWidth={2} color={theme.placeholderText} style={{ marginRight: 10 }} />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.sendButton, {
+                                    backgroundColor: message.trim() ? theme.activeButton : theme.inactiveButton
+                                }]}
+                                onPress={handleSend}
+                                disabled={!message.trim()}
+                            >
+                                <ArrowUp
+                                    size={19}
+                                    strokeWidth={3}
+                                    color={message.trim() ? theme.background : theme.disabledText}
+                                />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
-            </View>
-        </Animated.View>
+            </Animated.View>
+            {/* Fake view that ALWAYS pushes content up */}
+            <Animated.View style={fakeViewStyle} />
+        </>
     );
 };
 
