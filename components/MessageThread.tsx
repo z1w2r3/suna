@@ -2,9 +2,15 @@ import { Message } from '@/api/chat-api';
 import { commonStyles } from '@/constants/CommonStyles';
 import { useTheme } from '@/hooks/useThemeColor';
 import { useCurrentTool, useIsGenerating } from '@/stores/ui-store';
-import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, {
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming
+} from 'react-native-reanimated';
 import { MessageActionModal } from './MessageActionModal';
 import { SkeletonChatMessages } from './Skeleton';
 import { Body } from './Typography';
@@ -70,7 +76,7 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
         );
     } else {
         // AI messages full width, no bubble - with partial text selection
-        const displayContent = isStreaming ? streamContent : parsedContent;
+        const displayContent = isStreaming ? (streamContent || parsedContent) : parsedContent;
 
         return (
             <View style={styles.aiMessageContainer}>
@@ -83,9 +89,11 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
                     selectTextOnFocus={false}
                 />
                 {isStreaming && (
-                    <Body style={[styles.streamingIndicator, { color: theme.mutedForeground }]}>
-                        ●
-                    </Body>
+                    <View style={styles.streamingIndicator}>
+                        <Body style={[styles.streamingIndicatorText, { color: theme.mutedForeground }]}>
+                            ●
+                        </Body>
+                    </View>
                 )}
             </View>
         );
@@ -103,6 +111,36 @@ interface MessageThreadProps {
     onScrollPositionChange?: (isAtBottom: boolean) => void;
     keyboardHeight?: number;
 }
+
+// Shimmer component for thinking animation
+const ThinkingText = memo<{ children: string; color: string }>(({ children, color }) => {
+    const opacity = useSharedValue(0.3);
+
+    useEffect(() => {
+        opacity.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 800 }),
+                withTiming(0.3, { duration: 800 })
+            ),
+            -1,
+            false
+        );
+    }, [opacity]);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        opacity: opacity.value,
+    }));
+
+    return (
+        <Animated.View style={animatedStyle}>
+            <Body style={[styles.generatingText, { color }]}>
+                {children}
+            </Body>
+        </Animated.View>
+    );
+});
+
+ThinkingText.displayName = 'ThinkingText';
 
 export const MessageThread: React.FC<MessageThreadProps> = ({
     messages,
@@ -157,6 +195,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     }, []);
 
     const displayMessages = useMemo(() => {
+        // If not generating or no stream content, just show regular messages
         if (!showGenerating || !streamContent) {
             return messages;
         }
@@ -164,29 +203,34 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         const lastMessage = messages[messages.length - 1];
         const isLastMessageFromAI = lastMessage && lastMessage.type === 'assistant';
 
+        // Check if the last message contains similar content to the stream
+        // This prevents duplicates when Supabase refetches the completed message
         if (isLastMessageFromAI && streamContent) {
-            return [
-                ...messages.slice(0, -1),
-                {
-                    ...lastMessage,
-                    content: JSON.stringify({ content: streamContent }),
-                }
-            ];
-        } else if (streamContent) {
-            const streamingMessage: Message = {
-                message_id: 'streaming-temp',
-                thread_id: messages[0]?.thread_id || '',
-                type: 'assistant',
-                is_llm_message: true,
-                content: JSON.stringify({ content: streamContent }),
-                metadata: {},
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            };
-            return [...messages, streamingMessage];
+            const lastMessageContent = typeof lastMessage.content === 'string'
+                ? lastMessage.content
+                : JSON.stringify(lastMessage.content);
+
+            // If the last message contains most of the streamed content, don't show streaming message
+            const streamWords = streamContent.trim().split(/\s+/).slice(0, 10).join(' '); // First 10 words
+            if (streamWords.length > 20 && lastMessageContent.includes(streamWords)) {
+                console.log('[MessageThread] Detected duplicate - using Supabase message instead of streaming');
+                return messages; // Use the real message from Supabase
+            }
         }
 
-        return messages;
+        // If there's stream content, show it as a streaming message
+        const streamingMessage: Message = {
+            message_id: 'streaming-temp',
+            thread_id: messages[0]?.thread_id || '',
+            type: 'assistant',
+            is_llm_message: true,
+            content: streamContent, // Use raw stream content
+            metadata: {},
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        };
+
+        return [...messages, streamingMessage];
     }, [messages, streamContent, showGenerating]);
 
     const handleContentSizeChange = useCallback(() => {
@@ -256,10 +300,10 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
         if (!streamContent) {
             return (
-                <View style={styles.generatingContainer}>
-                    <Body style={[styles.generatingText, { color: theme.placeholderText }]}>
-                        {currentTool ? `${currentTool.name} is thinking...` : 'Generating response...'}
-                    </Body>
+                <View style={styles.thinkingContainer}>
+                    <ThinkingText color={theme.placeholderText}>
+                        {currentTool ? `${currentTool.name} is thinking...` : 'Suna is thinking...'}
+                    </ThinkingText>
                 </View>
             );
         }
@@ -387,5 +431,15 @@ const styles = StyleSheet.create({
         fontSize: 16,
         textAlign: 'center',
         fontStyle: 'italic',
+    },
+    thinkingContainer: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        alignItems: 'flex-start',
+    },
+    streamingIndicatorText: {
+        fontSize: 12,
+        marginLeft: 4,
+        opacity: 0.7,
     },
 });

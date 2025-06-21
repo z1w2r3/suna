@@ -235,10 +235,9 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
                     onPress={onClose}
                 />
 
-                {/* Pure scale morphing message bubble */}
                 <Animated.View style={[
                     styles.messageContainer,
-                    { backgroundColor: theme.messageBubble },
+                    { backgroundColor: theme.sidebar },
                     animatedMessageStyle
                 ]}>
                     <Body style={[styles.messageText, { color: theme.userMessage }]}>
@@ -259,7 +258,7 @@ export const MessageActionModal: React.FC<MessageActionModalProps> = ({
                         onPress={handleCopy}
                         activeOpacity={0.8}
                     >
-                        <Text style={[styles.copyText, { color: '#FFFFFF' }]}>
+                        <Text style={[styles.copyText, { color: theme.foreground }]}>
                             Copy
                         </Text>
                     </TouchableOpacity>

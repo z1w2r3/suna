@@ -4,6 +4,18 @@ import { createStreamingQuery } from '@/stores/query-client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { handleApiError } from './error-handlers';
 
+// Import EventSource polyfill for React Native  
+import { Platform } from 'react-native';
+
+// Use global EventSource if available, otherwise try polyfill
+let EventSourceClass: typeof EventSource;
+if (Platform.OS === 'web' || typeof global.EventSource !== 'undefined') {
+  EventSourceClass = global.EventSource || EventSource;
+} else {
+  // For React Native, we'll implement a simple fetch-based alternative
+  console.warn('[STREAM] Using fetch-based streaming instead of EventSource for React Native');
+}
+
 // Message types (aligned with existing MessageThread)
 export interface Message {
   message_id: string;
@@ -74,6 +86,106 @@ export class BillingError extends Error {
 // Active streams management
 const activeStreams = new Map<string, EventSource>();
 const nonRunningAgentRuns = new Set<string>();
+
+// XMLHttpRequest-based streaming for React Native (better streaming support)
+const setupFetchStream = async (
+  url: string,
+  agentRunId: string,
+  callbacks: {
+    onMessage: (content: string) => void;
+    onError: (error: Error | string) => void;
+    onClose: () => void;
+  }
+): Promise<() => void> => {
+  console.log(`[XHR-STREAM] Setting up XHR stream for ${agentRunId}`);
+  
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    let isActive = true;
+    let lastResponseLength = 0;
+    
+    const cleanup = () => {
+      isActive = false;
+      if (xhr.readyState !== XMLHttpRequest.DONE) {
+        xhr.abort();
+      }
+      console.log(`[XHR-STREAM] Cleaned up stream for ${agentRunId}`);
+    };
+
+    xhr.open('GET', url, true);
+    xhr.setRequestHeader('Accept', 'text/event-stream');
+    xhr.setRequestHeader('Cache-Control', 'no-cache');
+    
+    xhr.onreadystatechange = () => {
+      if (!isActive) return;
+      
+      console.log(`[XHR-STREAM] ReadyState changed to: ${xhr.readyState}`);
+      
+      if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
+        console.log(`[XHR-STREAM] Status: ${xhr.status}`);
+        console.log(`[XHR-STREAM] Response headers: ${xhr.getAllResponseHeaders()}`);
+        
+        if (xhr.status !== 200) {
+          console.error(`[XHR-STREAM] HTTP Error: ${xhr.status} ${xhr.statusText}`);
+          callbacks.onError(`HTTP ${xhr.status}: ${xhr.statusText}`);
+          return;
+        }
+      }
+      
+      if (xhr.readyState === XMLHttpRequest.LOADING || xhr.readyState === XMLHttpRequest.DONE) {
+        const newData = xhr.responseText.substring(lastResponseLength);
+        lastResponseLength = xhr.responseText.length;
+        
+        if (newData) {
+          console.log(`[XHR-STREAM] Received chunk:`, newData.substring(0, 100) + '...');
+          
+          // Process each line
+          const lines = newData.split('\n');
+          for (const line of lines) {
+            if (!isActive) break;
+            
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data && data !== '[DONE]') {
+                console.log(`[XHR-STREAM] Processing data:`, data.substring(0, 50) + '...');
+                callbacks.onMessage(line); // Send the full "data: ..." line
+              }
+            }
+          }
+        }
+        
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          console.log(`[XHR-STREAM] Stream completed for ${agentRunId}`);
+          callbacks.onClose();
+        }
+      }
+    };
+    
+    xhr.onerror = () => {
+      if (!isActive) return;
+      console.error(`[XHR-STREAM] Network error for ${agentRunId}`);
+      callbacks.onError('Network error occurred');
+    };
+    
+    xhr.onabort = () => {
+      if (isActive) {
+        console.log(`[XHR-STREAM] Request aborted for ${agentRunId}`);
+        callbacks.onClose();
+      }
+    };
+    
+    xhr.ontimeout = () => {
+      if (!isActive) return;
+      console.error(`[XHR-STREAM] Request timeout for ${agentRunId}`);
+      callbacks.onError('Request timeout');
+    };
+    
+    console.log(`[XHR-STREAM] Starting request to: ${url}`);
+    xhr.send();
+    
+    resolve(cleanup);
+  });
+};
 
 // SSE streaming helper
 export const fetchSSE = async (url: string): Promise<ReadableStream<string>> => {
@@ -698,71 +810,80 @@ export const streamAgent = (
       url.searchParams.append('token', session.access_token);
 
       console.log(`[STREAM] Creating EventSource for ${agentRunId}`);
+      console.log(`[STREAM] Stream URL:`, url.toString());
+      console.log(`[STREAM] SERVER_URL:`, SERVER_URL);
+      console.log(`[STREAM] Platform:`, Platform.OS);
+      console.log(`[STREAM] EventSource available:`, typeof global.EventSource !== 'undefined');
+      
+      // Use XHR-based streaming for React Native
+      if (Platform.OS !== 'web' && typeof global.EventSource === 'undefined') {
+        console.log(`[STREAM] Using XHR-based streaming for React Native`);
+        const xhrCleanup = await setupFetchStream(url.toString(), agentRunId, callbacks);
+        return xhrCleanup;
+      }
+      
+      // Use EventSource for web or if available
       const eventSource = new EventSource(url.toString());
+      console.log(`[STREAM] EventSource created, readyState:`, eventSource.readyState);
 
       activeStreams.set(agentRunId, eventSource);
 
+      // Set a timeout to detect connection issues
+      const connectionTimeout = setTimeout(() => {
+        if (eventSource.readyState === EventSource.CONNECTING) {
+          console.error(`[STREAM] EventSource connection timeout for ${agentRunId}`);
+          console.error(`[STREAM] Still connecting after 10 seconds - possible network/CORS issue`);
+          eventSource.close();
+          activeStreams.delete(agentRunId);
+          callbacks.onError('Connection timeout - check network and backend availability');
+          callbacks.onClose();
+        }
+      }, 10000); // 10 second timeout
+
       eventSource.onopen = () => {
         console.log(`[STREAM] Connection opened for ${agentRunId}`);
+        console.log(`[STREAM] EventSource URL: ${url.toString()}`);
+        console.log(`[STREAM] EventSource readyState: ${eventSource.readyState}`);
+        clearTimeout(connectionTimeout);
       };
 
       eventSource.onmessage = (event) => {
         try {
           const rawData = event.data;
-          if (rawData.includes('"type":"ping"')) return;
-
-          console.log(`[STREAM] Received data for ${agentRunId}: ${rawData.substring(0, 100)}${rawData.length > 100 ? '...' : ''}`);
-
-          if (!rawData || rawData.trim() === '') {
+          console.log(`[STREAM] Raw EventSource data received:`, rawData);
+          
+          if (rawData.includes('"type":"ping"')) {
+            console.log(`[STREAM] Received ping, ignoring`);
             return;
           }
 
+          console.log(`[STREAM] Processing data for ${agentRunId}: ${rawData.substring(0, 200)}${rawData.length > 200 ? '...' : ''}`);
+
+          if (!rawData || rawData.trim() === '') {
+            console.log(`[STREAM] Empty data received, skipping`);
+            return;
+          }
+
+          // Try to parse as JSON first for debugging
           try {
             const jsonData = JSON.parse(rawData);
+            console.log(`[STREAM] Parsed JSON data:`, {
+              type: jsonData.type,
+              sequence: jsonData.sequence,
+              contentPreview: typeof jsonData.content === 'string' ? jsonData.content.substring(0, 100) : jsonData.content,
+              metadata: jsonData.metadata
+            });
+            
             if (jsonData.status === 'error') {
               console.error(`[STREAM] Error status received for ${agentRunId}:`, jsonData);
               callbacks.onError(jsonData.message || 'Unknown error occurred');
               return;
             }
           } catch (jsonError) {
-            // Not JSON, continue with normal processing
+            console.log(`[STREAM] Not JSON data, treating as raw:`, rawData.substring(0, 100));
           }
 
-          if (rawData.includes('Agent run') && rawData.includes('not found in active runs')) {
-            console.log(`[STREAM] Agent run ${agentRunId} not found in active runs`);
-            nonRunningAgentRuns.add(agentRunId);
-            callbacks.onError('Agent run not found in active runs');
-            eventSource.close();
-            activeStreams.delete(agentRunId);
-            callbacks.onClose();
-            return;
-          }
-
-          if (rawData.includes('"type":"status"') && rawData.includes('"status":"completed"')) {
-            console.log(`[STREAM] Detected completion for ${agentRunId}`);
-            
-            if (rawData.includes('Run data not available for streaming') || 
-                rawData.includes('Stream ended with status: completed')) {
-              nonRunningAgentRuns.add(agentRunId);
-            }
-
-            callbacks.onMessage(rawData);
-            eventSource.close();
-            activeStreams.delete(agentRunId);
-            callbacks.onClose();
-            return;
-          }
-
-          if (rawData.includes('"type":"status"') && rawData.includes('"status_type":"thread_run_end"')) {
-            console.log(`[STREAM] Detected thread run end for ${agentRunId}`);
-            nonRunningAgentRuns.add(agentRunId);
-            callbacks.onMessage(rawData);
-            eventSource.close();
-            activeStreams.delete(agentRunId);
-            callbacks.onClose();
-            return;
-          }
-
+          // Pass all data to the callback for processing
           callbacks.onMessage(rawData);
         } catch (error) {
           console.error(`[STREAM] Error handling message:`, error);
@@ -771,7 +892,20 @@ export const streamAgent = (
       };
 
       eventSource.onerror = (event) => {
-        console.log(`[STREAM] EventSource error for ${agentRunId}:`, event);
+        console.error(`[STREAM] EventSource error for ${agentRunId}:`, event);
+        console.log(`[STREAM] EventSource readyState: ${eventSource.readyState}`);
+        console.log(`[STREAM] Event details:`, {
+          type: event.type,
+          target: event.target,
+          currentTarget: event.currentTarget
+        });
+        console.error(`[STREAM] EventSource failed to connect to: ${url.toString()}`);
+        clearTimeout(connectionTimeout);
+        
+        // If connection failed, try to get more info
+        if (eventSource.readyState === EventSource.CLOSED) {
+          console.error(`[STREAM] Connection closed immediately - possible CORS or network issue`);
+        }
 
         getAgentStatus(agentRunId)
           .then((status) => {

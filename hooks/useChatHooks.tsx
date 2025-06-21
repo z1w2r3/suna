@@ -13,6 +13,7 @@ import {
     streamAgent,
     Thread
 } from '@/api/chat-api';
+import { useSetCurrentTool, useSetIsGenerating } from '@/stores/ui-store';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -176,9 +177,24 @@ export const useStopAgent = () => {
     });
 };
 
-// Streaming Hook
+// Helper to safely parse JSON
+const safeJsonParse = <T,>(str: string, fallback: T): T => {
+    try {
+        return JSON.parse(str);
+    } catch {
+        return fallback;
+    }
+};
+
+// Streaming Hook - Based on web frontend patterns
+// This hook manages real-time AI agent streaming with:
+// - Server-Sent Events (SSE) via EventSource
+// - Message parsing for text chunks and tool calls
+// - UI state management (isGenerating, currentTool)
+// - Auto-refetch of messages on completion
+// - Proper cleanup and error handling
 export interface UseAgentStreamResult {
-    status: 'idle' | 'connecting' | 'streaming' | 'completed' | 'error';
+    status: 'idle' | 'connecting' | 'streaming' | 'completed' | 'error' | 'stopped';
     textContent: string;
     toolCall: ParsedContent | null;
     error: string | null;
@@ -190,100 +206,275 @@ export interface UseAgentStreamResult {
 
 export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
     const queryClient = useQueryClient();
+    const setCurrentTool = useSetCurrentTool();
+    const setIsGenerating = useSetIsGenerating();
+
     const [status, setStatus] = useState<UseAgentStreamResult['status']>('idle');
-    const [textContent, setTextContent] = useState('');
+    const [textContent, setTextContent] = useState<{ content: string; sequence?: number }[]>([]);
     const [toolCall, setToolCall] = useState<ParsedContent | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [agentRunId, setAgentRunId] = useState<string | null>(null);
     const cleanupRef = useRef<(() => void) | null>(null);
+    const isMountedRef = useRef(true);
+    const currentRunIdRef = useRef<string | null>(null);
+
+    // Convert ordered text content to string
+    const orderedTextContent = textContent
+        .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+        .reduce((acc, curr) => acc + curr.content, '');
+
+    const finalizeStream = useCallback((finalStatus: string, runId?: string) => {
+        if (!isMountedRef.current) return;
+
+        console.log(`[useAgentStream] Finalizing stream with status: ${finalStatus}`);
+
+        if (cleanupRef.current) {
+            cleanupRef.current();
+            cleanupRef.current = null;
+        }
+
+        // Update UI store immediately to stop thinking indicator
+        setIsGenerating(false);
+        setCurrentTool(null);
+
+        // Set status to completed immediately so isStreaming becomes false
+        setStatus(finalStatus as UseAgentStreamResult['status']);
+
+        // Reset streaming state after a short delay to show final streaming content
+        setTimeout(() => {
+            if (!isMountedRef.current) return;
+            console.log(`[useAgentStream] Clearing streaming content`);
+            setTextContent([]);
+            setToolCall(null);
+            setAgentRunId(null);
+            currentRunIdRef.current = null;
+        }, 300); // Shorter delay
+
+        // Refetch messages after a delay so users see the streaming effect
+        if (threadId && ['completed', 'stopped', 'error'].includes(finalStatus)) {
+            setTimeout(() => {
+                if (!isMountedRef.current) return;
+                console.log(`[useAgentStream] Refetching messages for thread ${threadId}`);
+                queryClient.invalidateQueries({ queryKey: chatKeys.messagesForThread(threadId) });
+            }, 800); // Shorter delay
+        }
+    }, [queryClient, threadId, setIsGenerating, setCurrentTool]);
+
+    const handleStreamMessage = useCallback((rawData: string) => {
+        if (!isMountedRef.current) return;
+
+        console.log(`[useAgentStream] Received raw data:`, rawData.substring(0, 200) + '...');
+
+        let processedData = rawData;
+        if (processedData.startsWith('data: ')) {
+            processedData = processedData.substring(6).trim();
+        }
+        if (!processedData) return;
+
+        // Check for completion messages
+        if (processedData.includes('Run data not available for streaming') ||
+            processedData.includes('Stream ended with status: completed') ||
+            processedData.includes('"status": "completed"')) {
+            console.log('[useAgentStream] Detected completion message');
+            finalizeStream('completed');
+            return;
+        }
+
+        try {
+            const jsonData = JSON.parse(processedData);
+            console.log(`[useAgentStream] Parsed JSON:`, {
+                type: jsonData.type,
+                sequence: jsonData.sequence,
+                hasContent: !!jsonData.content,
+                hasMetadata: !!jsonData.metadata
+            });
+
+            // Handle status messages
+            if (jsonData.status === 'error') {
+                console.error('[useAgentStream] Received error status:', jsonData);
+                const errorMessage = jsonData.message || 'Unknown error occurred';
+                setError(errorMessage);
+                return;
+            }
+
+            if (jsonData.status === 'completed') {
+                console.log('[useAgentStream] Received completion status');
+                finalizeStream('completed');
+                return;
+            }
+
+            // Parse as unified message
+            const parsedContent = safeJsonParse<any>(jsonData.content || '{}', {});
+            const parsedMetadata = safeJsonParse<any>(jsonData.metadata || '{}', {});
+
+            console.log(`[useAgentStream] Parsed content:`, {
+                streamStatus: parsedMetadata.stream_status,
+                contentText: parsedContent.content?.substring(0, 50) + '...'
+            });
+
+            // Update status to streaming if we receive valid content
+            if (status !== 'streaming') {
+                console.log('[useAgentStream] Setting status to streaming');
+                setStatus('streaming');
+                setIsGenerating(true);
+            }
+
+            switch (jsonData.type) {
+                case 'assistant':
+                    if (parsedMetadata.stream_status === 'chunk' && parsedContent.content) {
+                        // Real-time streaming: add each chunk immediately
+                        console.log('[useAgentStream] Received text chunk:', parsedContent.content);
+                        setTextContent(prev => {
+                            const newContent = prev.concat({
+                                sequence: jsonData.sequence || 0,
+                                content: parsedContent.content,
+                            });
+                            const totalText = newContent.map(c => c.content).join('');
+                            console.log('[useAgentStream] Total accumulated text length:', totalText.length);
+                            return newContent;
+                        });
+                    } else if (parsedMetadata.stream_status === 'complete') {
+                        // Stream completed - DON'T clear streaming text immediately
+                        console.log('[useAgentStream] Assistant message complete - keeping text visible');
+                        // Don't clear text here, let finalizeStream handle it with delay
+                    } else if (!parsedMetadata.stream_status && parsedContent.content) {
+                        // Handle non-streaming assistant messages
+                        console.log('[useAgentStream] Received non-streaming assistant content:', parsedContent.content);
+                        setTextContent(prev => prev.concat({
+                            sequence: jsonData.sequence || 0,
+                            content: parsedContent.content,
+                        }));
+                    }
+                    break;
+
+                case 'status':
+                    switch (parsedContent.status_type) {
+                        case 'tool_started':
+                            const toolInfo = {
+                                type: 'tool_call' as const,
+                                content: `Tool: ${parsedContent.function_name || 'Unknown'}`,
+                                role: 'assistant' as const,
+                                status_type: 'tool_started',
+                                name: parsedContent.function_name,
+                                arguments: parsedContent.arguments,
+                                xml_tag_name: parsedContent.xml_tag_name,
+                                tool_index: parsedContent.tool_index,
+                            };
+                            setToolCall(toolInfo);
+
+                            // Update UI store with current tool
+                            setCurrentTool({
+                                id: `tool-${parsedContent.tool_index || 'unknown'}`,
+                                name: parsedContent.function_name || 'Unknown Tool',
+                                isActive: true,
+                                data: parsedContent.arguments,
+                            });
+                            break;
+                        case 'tool_completed':
+                        case 'tool_failed':
+                        case 'tool_error':
+                            if (toolCall?.tool_index === parsedContent.tool_index) {
+                                setToolCall(null);
+                                setCurrentTool(null);
+                            }
+                            break;
+                        case 'thread_run_end':
+                            console.log('[useAgentStream] Received thread run end');
+                            finalizeStream('completed');
+                            return;
+                        case 'error':
+                            console.error('[useAgentStream] Status error:', parsedContent.message);
+                            setError(parsedContent.message || 'Agent run failed');
+                            finalizeStream('error');
+                            return;
+                    }
+                    break;
+            }
+        } catch (parseError) {
+            // Try basic content parsing for non-JSON messages
+            const parsed = parseStreamContent(processedData);
+            if (parsed?.type === 'text') {
+                setTextContent(prev => prev.concat({ content: parsed.content, sequence: 0 }));
+            }
+        }
+    }, [status, toolCall, finalizeStream, setIsGenerating, setCurrentTool]);
+
+    const handleStreamError = useCallback((err: Error | string) => {
+        if (!isMountedRef.current) return;
+
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error('[useAgentStream] Stream error:', errorMessage);
+        setError(errorMessage);
+        finalizeStream('error');
+    }, [finalizeStream]);
+
+    const handleStreamClose = useCallback(() => {
+        if (!isMountedRef.current) return;
+        console.log('[useAgentStream] Stream connection closed');
+
+        // Only finalize as completed if we weren't already in an error state
+        if (status === 'streaming' || status === 'connecting') {
+            finalizeStream('completed');
+        }
+    }, [status, finalizeStream]);
 
     const startStreaming = useCallback((runId: string) => {
-        console.log('[HOOK] Starting stream for agent run:', runId);
+        if (!isMountedRef.current) return;
+
+        console.log(`[useAgentStream] Starting stream for agent run: ${runId}`);
+
+        // Clean up existing stream
+        if (cleanupRef.current) {
+            cleanupRef.current();
+            cleanupRef.current = null;
+        }
 
         // Reset state
         setStatus('connecting');
-        setTextContent('');
+        setTextContent([]);
         setToolCall(null);
         setError(null);
         setAgentRunId(runId);
+        currentRunIdRef.current = runId;
 
-        // Stop any existing stream
-        if (cleanupRef.current) {
-            cleanupRef.current();
-            cleanupRef.current = null;
-        }
+        // Update UI store
+        setIsGenerating(true);
 
         const cleanup = streamAgent(runId, {
-            onMessage: (rawData) => {
-                try {
-                    setStatus('streaming');
-
-                    // Parse the content
-                    const parsed = parseStreamContent(rawData);
-                    if (parsed) {
-                        if (parsed.type === 'text') {
-                            setTextContent(prev => prev + parsed.content);
-                        } else if (parsed.type === 'tool_call') {
-                            setToolCall(parsed);
-                        }
-                    }
-
-                    // Also try to parse as JSON for status updates
-                    try {
-                        const data = JSON.parse(rawData);
-                        if (data.type === 'content' && data.content) {
-                            setTextContent(prev => prev + data.content);
-                        }
-                    } catch (parseError) {
-                        // Not JSON, ignore
-                    }
-                } catch (err) {
-                    console.error('[HOOK] Error processing stream message:', err);
-                }
-            },
-            onError: (streamError) => {
-                console.error('[HOOK] Stream error:', streamError);
-                setStatus('error');
-                setError(streamError instanceof Error ? streamError.message : String(streamError));
-            },
-            onClose: () => {
-                console.log('[HOOK] Stream closed');
-                setStatus(prev => prev === 'error' ? 'error' : 'completed');
-
-                // Refresh messages after stream completes
-                if (threadId) {
-                    queryClient.invalidateQueries({ queryKey: chatKeys.messagesForThread(threadId) });
-                }
-
-                // Clear cleanup ref
-                cleanupRef.current = null;
-            },
+            onMessage: handleStreamMessage,
+            onError: handleStreamError,
+            onClose: handleStreamClose,
         });
 
         cleanupRef.current = cleanup;
-    }, [queryClient, threadId]);
+    }, [handleStreamMessage, handleStreamError, handleStreamClose, setIsGenerating]);
 
     const stopStreaming = useCallback(() => {
-        console.log('[HOOK] Manually stopping stream');
+        console.log('[useAgentStream] Manually stopping stream');
         if (cleanupRef.current) {
             cleanupRef.current();
             cleanupRef.current = null;
         }
-        setStatus('completed');
-    }, []);
+        finalizeStream('stopped');
+    }, [finalizeStream]);
 
     // Cleanup on unmount
     useEffect(() => {
+        isMountedRef.current = true;
         return () => {
+            isMountedRef.current = false;
             if (cleanupRef.current) {
                 cleanupRef.current();
             }
+            // Clean up UI store on unmount
+            setIsGenerating(false);
+            setCurrentTool(null);
         };
-    }, []);
+    }, [setIsGenerating, setCurrentTool]);
 
     return {
         status,
-        textContent,
+        textContent: orderedTextContent,
         toolCall,
         error,
         agentRunId,
@@ -326,11 +517,14 @@ export const useChatSession = (projectId: string) => {
     const startAgentMutation = useStartAgent();
     const stopAgentMutation = useStopAgent();
     const agentStream = useAgentStream(thread?.thread_id);
-
-    // Removed auto-thread creation - threads only created when user sends message
+    const setIsGenerating = useSetIsGenerating();
 
     const sendMessage = useCallback(async (content: string) => {
         try {
+            // START THINKING STATE IMMEDIATELY
+            console.log('[useChatSession] Starting thinking state immediately');
+            setIsGenerating(true);
+
             // Ensure thread exists (CREATE ONLY WHEN SENDING MESSAGE)
             const currentThread = await ensureThread();
 
@@ -349,9 +543,11 @@ export const useChatSession = (projectId: string) => {
             agentStream.startStreaming(result.agent_run_id);
         } catch (error) {
             console.error('[HOOK] Failed to send message:', error);
+            // Stop thinking state on error
+            setIsGenerating(false);
             throw error;
         }
-    }, [ensureThread, addMessage, startAgentMutation, agentStream]);
+    }, [ensureThread, addMessage, startAgentMutation, agentStream, setIsGenerating]);
 
     const stopAgent = useCallback(() => {
         if (agentStream.agentRunId) {
@@ -360,7 +556,7 @@ export const useChatSession = (projectId: string) => {
         agentStream.stopStreaming();
     }, [agentStream, stopAgentMutation]);
 
-    return {
+    const result = {
         thread,
         messages,
         isLoading: threadLoading || messagesLoading,
@@ -374,4 +570,14 @@ export const useChatSession = (projectId: string) => {
         streamError: agentStream.error,
         isSending: addMessage.isPending || startAgentMutation.isPending,
     };
+
+    // Debug logging for streaming state
+    if (agentStream.textContent) {
+        console.log('[useChatSession] Streaming content:', agentStream.textContent.slice(0, 100) + '...');
+    }
+    if (agentStream.isStreaming) {
+        console.log('[useChatSession] Is streaming:', agentStream.isStreaming, 'Status:', agentStream.status);
+    }
+
+    return result;
 }; 
