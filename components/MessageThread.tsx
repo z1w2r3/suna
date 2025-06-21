@@ -3,7 +3,9 @@ import { commonStyles } from '@/constants/CommonStyles';
 import { useTheme } from '@/hooks/useThemeColor';
 import { useCurrentTool, useIsGenerating } from '@/stores/ui-store';
 import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { MessageActionModal } from './MessageActionModal';
 import { SkeletonChatMessages } from './Skeleton';
 import { Body } from './Typography';
 
@@ -11,10 +13,13 @@ interface MessageItemProps {
     message: Message;
     isStreaming?: boolean;
     streamContent?: string;
+    isHidden?: boolean;
+    onLongPress?: (messageText: string, layout: { x: number; y: number; width: number; height: number }, messageId: string) => void;
 }
 
-const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamContent }) => {
+const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamContent, isHidden, onLongPress }) => {
     const theme = useTheme();
+    const messageRef = useRef<View>(null);
 
     const parsedContent = useMemo(() => {
         try {
@@ -34,34 +39,54 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
         }
     }, [message.content]);
 
+    const handleLongPress = () => {
+        if (messageRef.current) {
+            messageRef.current.measure((x, y, width, height, pageX, pageY) => {
+                onLongPress?.(parsedContent, { x: pageX, y: pageY, width, height }, message.message_id);
+            });
+        }
+    };
+
     const isUser = message.type === 'user';
 
     if (isUser) {
         const bubbleColor = theme.messageBubble;
 
         return (
-            <View style={[styles.messageContainer, { alignSelf: 'flex-end' }]}>
-                <View style={[styles.messageBubble, { backgroundColor: bubbleColor }]}>
-                    <Body style={[styles.messageText, { color: theme.userMessage }]}>
-                        {parsedContent}
-                    </Body>
-                </View>
+            <View style={[styles.messageContainer, { alignSelf: 'flex-end' }, isHidden && { opacity: 0 }]}>
+                <TouchableOpacity
+                    ref={messageRef}
+                    onLongPress={handleLongPress}
+                    delayLongPress={500}
+                    activeOpacity={0.8}
+                >
+                    <Animated.View style={[styles.messageBubble, { backgroundColor: bubbleColor }]}>
+                        <Body style={[styles.messageText, { color: theme.userMessage }]}>
+                            {parsedContent}
+                        </Body>
+                    </Animated.View>
+                </TouchableOpacity>
             </View>
         );
     } else {
-        // AI messages full width, no bubble
+        // AI messages full width, no bubble - with partial text selection
         const displayContent = isStreaming ? streamContent : parsedContent;
 
         return (
             <View style={styles.aiMessageContainer}>
-                <Body style={[styles.aiMessageText, { color: theme.aiMessage }]}>
-                    {displayContent}
-                    {isStreaming && (
-                        <Body style={[styles.streamingIndicator, { color: theme.mutedForeground }]}>
-                            ●
-                        </Body>
-                    )}
-                </Body>
+                <TextInput
+                    value={displayContent}
+                    style={[styles.aiMessageText, { color: theme.aiMessage }]}
+                    editable={false}
+                    multiline={true}
+                    scrollEnabled={false}
+                    selectTextOnFocus={false}
+                />
+                {isStreaming && (
+                    <Body style={[styles.streamingIndicator, { color: theme.mutedForeground }]}>
+                        ●
+                    </Body>
+                )}
             </View>
         );
     }
@@ -94,6 +119,12 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     const currentScrollOffset = useRef(0);
     const isFirstLoad = useRef(true);
 
+    // Modal state
+    const [modalVisible, setModalVisible] = useState(false);
+    const [selectedMessageText, setSelectedMessageText] = useState('');
+    const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+    const [sourceLayout, setSourceLayout] = useState<{ x: number; y: number; width: number; height: number } | undefined>();
+
     const currentTool = useCurrentTool();
     const isGeneratingFromStore = useIsGenerating();
 
@@ -110,6 +141,20 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             onScrollPositionChange?.(isScrolledToBottom);
         }
     }, [isAtBottom, onScrollPositionChange]);
+
+    const handleLongPress = useCallback((messageText: string, layout: { x: number; y: number; width: number; height: number }, messageId: string) => {
+        setSelectedMessageText(messageText);
+        setSourceLayout(layout);
+        setSelectedMessageId(messageId);
+        setModalVisible(true);
+    }, []);
+
+    const handleCloseModal = useCallback(() => {
+        setModalVisible(false);
+        setSelectedMessageText('');
+        setSourceLayout(undefined);
+        setSelectedMessageId(null);
+    }, []);
 
     const displayMessages = useMemo(() => {
         if (!showGenerating || !streamContent) {
@@ -143,8 +188,6 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
         return messages;
     }, [messages, streamContent, showGenerating]);
-
-
 
     const handleContentSizeChange = useCallback(() => {
         if (isAtBottom && flatListRef.current) {
@@ -190,6 +233,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                 message={item}
                 isStreaming={isStreamingMessage && showGenerating}
                 streamContent={isStreamingMessage ? streamContent : undefined}
+                isHidden={item.message_id === selectedMessageId}
+                onLongPress={handleLongPress}
             />
         );
     };
@@ -246,22 +291,31 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     }
 
     return (
-        <FlatList
-            ref={flatListRef}
-            data={displayMessages}
-            renderItem={renderMessage}
-            keyExtractor={keyExtractor}
-            style={[styles.container, { backgroundColor: theme.background }]}
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
-            removeClippedSubviews
-            maxToRenderPerBatch={10}
-            windowSize={10}
-            ListFooterComponent={renderFooter}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            onContentSizeChange={handleContentSizeChange}
-        />
+        <>
+            <FlatList
+                ref={flatListRef}
+                data={displayMessages}
+                renderItem={renderMessage}
+                keyExtractor={keyExtractor}
+                style={[styles.container, { backgroundColor: theme.background }]}
+                contentContainerStyle={styles.content}
+                showsVerticalScrollIndicator={false}
+                removeClippedSubviews
+                maxToRenderPerBatch={10}
+                windowSize={10}
+                ListFooterComponent={renderFooter}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+                onContentSizeChange={handleContentSizeChange}
+            />
+
+            <MessageActionModal
+                visible={modalVisible}
+                onClose={handleCloseModal}
+                messageText={selectedMessageText}
+                sourceLayout={sourceLayout}
+            />
+        </>
     );
 };
 
@@ -295,6 +349,12 @@ const styles = StyleSheet.create({
     aiMessageText: {
         lineHeight: 20,
         paddingVertical: 8,
+        padding: 0,
+        margin: 0,
+        borderWidth: 0,
+        backgroundColor: 'transparent',
+        fontSize: 16,
+        fontFamily: 'System',
     },
     streamingIndicator: {
         fontSize: 12,
