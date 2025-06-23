@@ -40,7 +40,6 @@ const getProjects = async (): Promise<Project[]> => {
     }
 
     if (!userData.user) {
-      console.log('[API] No user logged in, returning empty projects array');
       return [];
     }
 
@@ -50,7 +49,8 @@ const getProjects = async (): Promise<Project[]> => {
         *,
         threads!inner(thread_id)
       `)
-      .eq('account_id', userData.user.id);
+      .eq('account_id', userData.user.id)
+      .order('created_at', { ascending: false });
 
     if (error) {
       if (
@@ -65,7 +65,6 @@ const getProjects = async (): Promise<Project[]> => {
       throw error;
     }
 
-    console.log('[API] Raw projects from DB:', data?.length, data);
 
     // Map database fields to our Project type
     const mappedProjects: Project[] = (data || []).map((project: any) => ({
@@ -83,7 +82,6 @@ const getProjects = async (): Promise<Project[]> => {
       },
     }));
 
-    console.log('[API] Mapped projects for frontend:', mappedProjects.length);
 
     return mappedProjects;
   } catch (err) {

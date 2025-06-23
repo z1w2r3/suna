@@ -20,8 +20,3 @@ const getServerUrl = (): string => {
 };
 
 export const SERVER_URL = getServerUrl();
-
-// Debug logging
-console.log('[SERVER] Backend URL configured:', SERVER_URL);
-console.log('[SERVER] Platform:', Platform.OS);
-console.log('[SERVER] Environment:', process.env.EXPO_PUBLIC_ENV_MODE);

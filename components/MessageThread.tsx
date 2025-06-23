@@ -1,9 +1,12 @@
 import { Message } from '@/api/chat-api';
 import { commonStyles } from '@/constants/CommonStyles';
+import { fontWeights } from '@/constants/Fonts';
 import { useTheme } from '@/hooks/useThemeColor';
 import { useCurrentTool, useIsGenerating } from '@/stores/ui-store';
+import { Markdown } from '@/utils/markdown-renderer';
+import { parseMessage, processStreamContent } from '@/utils/message-parser';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Keyboard, StyleSheet, TouchableOpacity, View } from 'react-native';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -13,6 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { MessageActionModal } from './MessageActionModal';
 import { SkeletonChatMessages } from './Skeleton';
+import { ToolCallRenderer } from './ToolCallRenderer';
 import { Body } from './Typography';
 
 interface MessageItemProps {
@@ -27,28 +31,23 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
     const theme = useTheme();
     const messageRef = useRef<View>(null);
 
-    const parsedContent = useMemo(() => {
-        try {
-            if (typeof message.content === 'string') {
-                try {
-                    const parsed = JSON.parse(message.content);
-                    return parsed.content || message.content;
-                } catch {
-                    return message.content;
-                }
-            } else if (typeof message.content === 'object' && message.content !== null) {
-                return message.content.content || JSON.stringify(message.content);
-            }
-            return String(message.content);
-        } catch {
-            return String(message.content);
+    const parsedMessage = useMemo(() => parseMessage(message), [message]);
+
+    const streamProcessed = useMemo(() =>
+        isStreaming && streamContent ? processStreamContent(streamContent) : null,
+        [isStreaming, streamContent]);
+
+    const displayContent = useMemo(() => {
+        if (isStreaming && streamProcessed) {
+            return streamProcessed.cleanContent || parsedMessage.cleanContent;
         }
-    }, [message.content]);
+        return parsedMessage.cleanContent;
+    }, [isStreaming, streamProcessed, parsedMessage.cleanContent]);
 
     const handleLongPress = () => {
         if (messageRef.current) {
             messageRef.current.measure((x, y, width, height, pageX, pageY) => {
-                onLongPress?.(parsedContent, { x: pageX, y: pageY, width, height }, message.message_id);
+                onLongPress?.(displayContent, { x: pageX, y: pageY, width, height }, message.message_id);
             });
         }
     };
@@ -68,26 +67,30 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
                 >
                     <Animated.View style={[styles.messageBubble, { backgroundColor: bubbleColor }]}>
                         <Body style={[styles.messageText, { color: theme.userMessage }]}>
-                            {parsedContent}
+                            {displayContent}
                         </Body>
                     </Animated.View>
                 </TouchableOpacity>
             </View>
         );
     } else {
-        // AI messages full width, no bubble - with partial text selection
-        const displayContent = isStreaming ? (streamContent || parsedContent) : parsedContent;
-
         return (
             <View style={styles.aiMessageContainer}>
-                <TextInput
-                    value={displayContent}
-                    style={[styles.aiMessageText, { color: theme.aiMessage }]}
-                    editable={false}
-                    multiline={true}
-                    scrollEnabled={false}
-                    selectTextOnFocus={false}
-                />
+                {displayContent && (
+                    <Markdown style={[styles.markdownContent]}>
+                        {displayContent}
+                    </Markdown>
+                )}
+
+                {parsedMessage.hasTools && (
+                    <ToolCallRenderer
+                        toolCalls={parsedMessage.toolCalls}
+                        onToolPress={(toolCall) => {
+                            console.log('Tool pressed:', toolCall.functionName, toolCall.parameters);
+                        }}
+                    />
+                )}
+
                 {isStreaming && (
                     <View style={styles.streamingIndicator}>
                         <Body style={[styles.streamingIndicatorText, { color: theme.mutedForeground }]}>
@@ -167,12 +170,96 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     const isGeneratingFromStore = useIsGenerating();
 
     const showGenerating = isGenerating || isGeneratingFromStore;
+    const prevShowGenerating = useRef(showGenerating);
+
+    const displayMessages = useMemo(() => {
+        // If not generating or no stream content, just show regular messages
+        if (!showGenerating || !streamContent) {
+            return messages.slice().reverse(); // Reverse for inverted list
+        }
+
+        const lastMessage = messages[messages.length - 1];
+        const isLastMessageFromAI = lastMessage && lastMessage.type === 'assistant';
+
+        // Check if the last message contains similar content to the stream
+        // This prevents duplicates when Supabase refetches the completed message
+        if (isLastMessageFromAI && streamContent) {
+            const lastMessageContent = typeof lastMessage.content === 'string'
+                ? lastMessage.content
+                : JSON.stringify(lastMessage.content);
+
+            // If the last message contains most of the streamed content, don't show streaming message
+            const streamWords = streamContent.trim().split(/\s+/).slice(0, 10).join(' '); // First 10 words
+            if (streamWords.length > 20 && lastMessageContent.includes(streamWords)) {
+                console.log('[MessageThread] Detected duplicate - using Supabase message instead of streaming');
+                return messages.slice().reverse(); // Use the real message from Supabase, reversed
+            }
+        }
+
+        // If there's stream content, show it as a streaming message
+        const streamingMessage: Message = {
+            message_id: 'streaming-temp',
+            thread_id: messages[0]?.thread_id || '',
+            type: 'assistant',
+            is_llm_message: true,
+            content: streamContent, // Use raw stream content
+            metadata: {},
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        };
+
+        return [...messages, streamingMessage].slice().reverse(); // Reverse for inverted list
+    }, [messages, streamContent, showGenerating]);
+
+    // Simplified - no more complex scroll logic needed for initial load
+    const handleContentSizeChange = useCallback(() => {
+        // Only scroll during active streaming
+        if (showGenerating && flatListRef.current) {
+            flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+        }
+    }, [showGenerating]);
+
+    // Auto-scroll to bottom and dismiss keyboard when streaming starts
+    useEffect(() => {
+        if (showGenerating && !prevShowGenerating.current) {
+            // Dismiss keyboard immediately
+            Keyboard.dismiss();
+
+            // For inverted list, scroll to offset 0 (which is the bottom)
+            setTimeout(() => {
+                if (flatListRef.current) {
+                    flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+                }
+            }, 50);
+        }
+        prevShowGenerating.current = showGenerating;
+    }, [showGenerating]);
+
+    // Enhanced auto-scroll during streaming - for inverted list
+    useEffect(() => {
+        if (showGenerating && streamContent && flatListRef.current) {
+            // For inverted list, scroll to offset 0 to stay at bottom
+            flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+        }
+    }, [streamContent, showGenerating]);
+
+    // Simplified keyboard handling - for inverted list
+    React.useEffect(() => {
+        if (keyboardHeight > 0 && flatListRef.current) {
+            setTimeout(() => {
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+            }, 100);
+        }
+    }, [keyboardHeight]);
+
+    // Remove all the complex initial load logic - not needed with inverted list
 
     const handleScroll = useCallback((event: any) => {
         const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
         currentScrollOffset.current = contentOffset.y;
 
-        const isScrolledToBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 50;
+        // For inverted list, isAtBottom is when contentOffset.y is close to 0
+        const isScrolledToBottom = contentOffset.y <= 50;
 
         if (isScrolledToBottom !== isAtBottom) {
             setIsAtBottom(isScrolledToBottom);
@@ -194,83 +281,17 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         setSelectedMessageId(null);
     }, []);
 
-    const displayMessages = useMemo(() => {
-        // If not generating or no stream content, just show regular messages
-        if (!showGenerating || !streamContent) {
-            return messages;
-        }
-
-        const lastMessage = messages[messages.length - 1];
-        const isLastMessageFromAI = lastMessage && lastMessage.type === 'assistant';
-
-        // Check if the last message contains similar content to the stream
-        // This prevents duplicates when Supabase refetches the completed message
-        if (isLastMessageFromAI && streamContent) {
-            const lastMessageContent = typeof lastMessage.content === 'string'
-                ? lastMessage.content
-                : JSON.stringify(lastMessage.content);
-
-            // If the last message contains most of the streamed content, don't show streaming message
-            const streamWords = streamContent.trim().split(/\s+/).slice(0, 10).join(' '); // First 10 words
-            if (streamWords.length > 20 && lastMessageContent.includes(streamWords)) {
-                console.log('[MessageThread] Detected duplicate - using Supabase message instead of streaming');
-                return messages; // Use the real message from Supabase
-            }
-        }
-
-        // If there's stream content, show it as a streaming message
-        const streamingMessage: Message = {
-            message_id: 'streaming-temp',
-            thread_id: messages[0]?.thread_id || '',
-            type: 'assistant',
-            is_llm_message: true,
-            content: streamContent, // Use raw stream content
-            metadata: {},
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-        };
-
-        return [...messages, streamingMessage];
-    }, [messages, streamContent, showGenerating]);
-
-    const handleContentSizeChange = useCallback(() => {
-        if (isAtBottom && flatListRef.current) {
-            flatListRef.current.scrollToEnd({ animated: false });
-        }
-        if (isFirstLoad.current && messages.length > 0 && flatListRef.current) {
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: false });
-                setIsAtBottom(true);
-            }, 10);
-        }
-    }, [isAtBottom, messages.length]);
-
-    React.useEffect(() => {
-        if (isAtBottom && keyboardHeight > 0 && flatListRef.current) {
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-            }, 150);
-        } else if (isAtBottom && keyboardHeight === 0 && flatListRef.current) {
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-            }, 150);
-        }
-    }, [keyboardHeight, isAtBottom]);
-
-    React.useEffect(() => {
-        if (messages.length > 0 && flatListRef.current) {
-            const delay = isFirstLoad.current ? 200 : 50;
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: false });
-                setIsAtBottom(true);
-                isFirstLoad.current = false;
-            }, delay);
-        }
-    }, [messages, messages[0]?.thread_id, isLoadingMessages]);
-
     const renderMessage = ({ item, index }: { item: Message; index: number }) => {
         const isLastMessage = index === displayMessages.length - 1;
         const isStreamingMessage = item.message_id === 'streaming-temp';
+
+        // Parse the message to check if it's a tool result
+        const parsed = parseMessage(item);
+
+        // Skip rendering pure tool result messages
+        if (parsed.isToolResultMessage && !parsed.cleanContent.trim()) {
+            return null;
+        }
 
         return (
             <MessageItem
@@ -308,7 +329,18 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             );
         }
 
-        return null;
+        // Check if we have a detected tool name from stream
+        const streamProcessed = processStreamContent(streamContent);
+        if (streamProcessed.currentToolName && streamProcessed.isStreamingTool) {
+            return (
+                <View style={styles.thinkingContainer}>
+                    <ThinkingText color={theme.placeholderText}>
+                        {`${streamProcessed.currentToolName} is running...`}
+                    </ThinkingText>
+                </View>
+            );
+        }
+
     };
 
     if (isLoadingMessages && messages.length === 0) {
@@ -347,7 +379,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                 removeClippedSubviews
                 maxToRenderPerBatch={10}
                 windowSize={10}
-                ListFooterComponent={renderFooter}
+                inverted={true}
+                ListHeaderComponent={renderFooter}
                 onScroll={handleScroll}
                 scrollEventThrottle={16}
                 onContentSizeChange={handleContentSizeChange}
@@ -412,7 +445,8 @@ const styles = StyleSheet.create({
     },
     generatingText: {
         fontStyle: 'italic',
-        fontSize: 14,
+        fontSize: 15,
+        fontFamily: fontWeights[500],
     },
     errorContainer: {
         paddingVertical: 12,
@@ -433,13 +467,17 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     },
     thinkingContainer: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 24,
+        paddingHorizontal: 0,
         alignItems: 'flex-start',
     },
     streamingIndicatorText: {
         fontSize: 12,
         marginLeft: 4,
         opacity: 0.7,
+    },
+    markdownContent: {
+        flex: 1,
     },
 });

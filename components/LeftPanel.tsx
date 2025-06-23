@@ -4,7 +4,7 @@ import { usePanelTopOffset } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
 import { useChatContext } from '@/hooks/useChatContext';
 import { useThemedStyles } from '@/hooks/useThemeColor';
-import { Bot, SquarePen, Store } from 'lucide-react-native';
+import { SquarePen } from 'lucide-react-native';
 import React from 'react';
 import { ScrollView, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -294,7 +294,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
 
             <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 {/* Agent Playground */}
-                <View style={styles.section}>
+                {/* <View style={styles.section}>
                     <TouchableOpacity style={styles.sectionItemWithBadge}>
                         <View style={styles.sectionItemLeft}>
                             <Bot size={20} color={styles.sectionText.color} style={styles.sectionIcon} />
@@ -304,10 +304,10 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                             <Caption style={styles.newBadgeText}>New</Caption>
                         </View>
                     </TouchableOpacity>
-                </View>
+                </View> */}
 
                 {/* Marketplace */}
-                <TouchableOpacity style={styles.sectionItemWithBadge}>
+                {/* <TouchableOpacity style={styles.sectionItemWithBadge}>
                     <View style={styles.sectionItemLeft}>
                         <Store size={20} color={styles.sectionText.color} style={styles.sectionIcon} />
                         <Body style={styles.sectionText}>Marketplace</Body>
@@ -315,7 +315,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                     <View style={styles.newBadge}>
                         <Caption style={styles.newBadgeText}>New</Caption>
                     </View>
-                </TouchableOpacity>
+                </TouchableOpacity> */}
 
                 {/* Projects (previously Tasks) */}
                 <View style={styles.section}>
