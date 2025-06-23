@@ -42,7 +42,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             justifyContent: 'space-between' as const,
             alignItems: 'center' as const,
             paddingHorizontal: 20,
-            paddingBottom: 16,
+            paddingBottom: 0,
         },
         title: {
             color: theme.foreground,
@@ -270,7 +270,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     };
 
     const handleProjectSelect = (project: any) => {
+        console.log('Project selected:', project.name);
         setSelectedProject(project);
+        console.log('Calling onClose...');
         onClose(); // Close the panel after selection
     };
 

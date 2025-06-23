@@ -84,7 +84,6 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
         },
         chatContent: {
             flex: 1,
-            marginTop: 30,
         },
     }));
 

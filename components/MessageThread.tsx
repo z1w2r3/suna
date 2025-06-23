@@ -2,7 +2,7 @@ import { Message } from '@/api/chat-api';
 import { commonStyles } from '@/constants/CommonStyles';
 import { fontWeights } from '@/constants/Fonts';
 import { useTheme } from '@/hooks/useThemeColor';
-import { useCurrentTool, useIsGenerating } from '@/stores/ui-store';
+import { useCurrentTool, useIsGenerating, useOpenToolView, useUpdateToolSnapshots } from '@/stores/ui-store';
 import { Markdown } from '@/utils/markdown-renderer';
 import { parseMessage, processStreamContent } from '@/utils/message-parser';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,9 +25,10 @@ interface MessageItemProps {
     streamContent?: string;
     isHidden?: boolean;
     onLongPress?: (messageText: string, layout: { x: number; y: number; width: number; height: number }, messageId: string) => void;
+    onToolPress?: (toolCall: any, messageId: string) => void;
 }
 
-const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamContent, isHidden, onLongPress }) => {
+const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamContent, isHidden, onLongPress, onToolPress }) => {
     const theme = useTheme();
     const messageRef = useRef<View>(null);
 
@@ -86,7 +87,7 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
                     <ToolCallRenderer
                         toolCalls={parsedMessage.toolCalls}
                         onToolPress={(toolCall) => {
-                            console.log('Tool pressed:', toolCall.functionName, toolCall.parameters);
+                            onToolPress?.(toolCall, message.message_id);
                         }}
                     />
                 )}
@@ -168,9 +169,23 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
     const currentTool = useCurrentTool();
     const isGeneratingFromStore = useIsGenerating();
+    const openToolView = useOpenToolView();
+    const updateToolSnapshots = useUpdateToolSnapshots();
 
     const showGenerating = isGenerating || isGeneratingFromStore;
     const prevShowGenerating = useRef(showGenerating);
+
+    // Update tool snapshots whenever messages change
+    useEffect(() => {
+        if (messages.length > 0) {
+            updateToolSnapshots(messages);
+        }
+    }, [messages, updateToolSnapshots]);
+
+    const handleToolPress = useCallback((toolCall: any, messageId: string) => {
+        // Store handles both tool selection and panel opening
+        openToolView(toolCall, messageId);
+    }, [openToolView]);
 
     const displayMessages = useMemo(() => {
         // If not generating or no stream content, just show regular messages
@@ -300,6 +315,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                 streamContent={isStreamingMessage ? streamContent : undefined}
                 isHidden={item.message_id === selectedMessageId}
                 onLongPress={handleLongPress}
+                onToolPress={handleToolPress}
             />
         );
     };
@@ -467,7 +483,7 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     },
     thinkingContainer: {
-        paddingTop: 12,
+        paddingTop: 0,
         paddingBottom: 24,
         paddingHorizontal: 0,
         alignItems: 'flex-start',

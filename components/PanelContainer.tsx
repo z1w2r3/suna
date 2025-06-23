@@ -1,3 +1,4 @@
+import { Message } from '@/api/chat-api';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import React, { useRef } from 'react';
 import { Dimensions, View } from 'react-native';
@@ -14,6 +15,7 @@ interface PanelContainerProps {
     onCloseRight: () => void;
     onOpenLeft: () => void;
     children: React.ReactNode;
+    messages?: Message[];
 }
 
 export const PanelContainer: React.FC<PanelContainerProps> = ({
@@ -23,6 +25,7 @@ export const PanelContainer: React.FC<PanelContainerProps> = ({
     onCloseRight,
     onOpenLeft,
     children,
+    messages = [],
 }) => {
     const leftDrawerRef = useRef<DrawerLayout>(null);
     const rightDrawerRef = useRef<DrawerLayout>(null);
@@ -55,11 +58,14 @@ export const PanelContainer: React.FC<PanelContainerProps> = ({
     }, [rightPanelVisible]);
 
     const leftDrawerContent = (
-        <LeftPanel isVisible={true} onClose={onCloseLeft} />
+        <LeftPanel isVisible={true} onClose={() => {
+            leftDrawerRef.current?.closeDrawer();
+            onCloseLeft();
+        }} />
     );
 
     const rightDrawerContent = (
-        <RightPanel isVisible={true} onClose={onCloseRight} />
+        <RightPanel isVisible={true} onClose={onCloseRight} messages={messages} />
     );
 
     const mainContent = (

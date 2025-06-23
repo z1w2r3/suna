@@ -3,22 +3,37 @@ import { ChatContainer } from '@/components/ChatContainer';
 import { ChatHeader } from '@/components/ChatHeader';
 import { PanelContainer } from '@/components/PanelContainer';
 import { Skeleton } from '@/components/Skeleton';
-import { commonStyles } from '@/constants/CommonStyles';
 import { useHeaderHeight } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
+import { useChatContext } from '@/hooks/useChatContext';
+import { useChatSession } from '@/hooks/useChatHooks';
 import { useThemedStyles } from '@/hooks/useThemeColor';
+import {
+    useLeftPanelVisible,
+    useRightPanelVisible,
+    useSetLeftPanelVisible,
+    useSetRightPanelVisible
+} from '@/stores/ui-store';
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
-    const [leftPanelVisible, setLeftPanelVisible] = useState(false);
-    const [rightPanelVisible, setRightPanelVisible] = useState(false);
+    // Use store state instead of local state for panel visibility
+    const leftPanelVisible = useLeftPanelVisible();
+    const rightPanelVisible = useRightPanelVisible();
+    const setLeftPanelVisible = useSetLeftPanelVisible();
+    const setRightPanelVisible = useSetRightPanelVisible();
+
     const [authOverlayVisible, setAuthOverlayVisible] = useState(false);
 
     const { user, loading } = useAuth();
+    const { selectedProject } = useChatContext();
     const insets = useSafeAreaInsets();
     const headerHeight = useHeaderHeight();
+
+    // Get messages from chat session
+    const { messages } = useChatSession(selectedProject?.id || '');
 
     const toggleLeftPanel = () => setLeftPanelVisible(!leftPanelVisible);
     const toggleRightPanel = () => setRightPanelVisible(!rightPanelVisible);
@@ -29,53 +44,26 @@ export default function HomeScreen() {
             backgroundColor: theme.background,
         },
         header: {
-            position: 'absolute' as const,
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 1000,
             backgroundColor: theme.background,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.border,
+            justifyContent: 'center' as const,
         },
         chatContainer: {
             flex: 1,
-            marginTop: headerHeight,
-        },
-        loadingContainer: {
-            ...commonStyles.flexCenter,
-            backgroundColor: theme.background,
         },
     }));
 
-    // Show loading screen while checking auth
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <Skeleton width={200} height={20} />
-                <Skeleton width={150} height={16} style={{ marginTop: 12 }} />
+            <View style={styles.container}>
+                <Skeleton />
             </View>
         );
     }
 
-    // Show auth overlay if user is not authenticated
     if (!user) {
         return (
-            <View style={styles.container}>
-                <AuthOverlay
-                    visible={true}
-                    onClose={() => { }} // User can't close this overlay manually
-                />
-            </View>
-        );
-    }
-
-    return (
-        <PanelContainer
-            leftPanelVisible={leftPanelVisible}
-            rightPanelVisible={rightPanelVisible}
-            onCloseLeft={() => setLeftPanelVisible(false)}
-            onCloseRight={() => setRightPanelVisible(false)}
-            onOpenLeft={() => setLeftPanelVisible(true)}
-        >
             <View style={styles.container}>
                 <View style={styles.header}>
                     <ChatHeader
@@ -86,13 +74,38 @@ export default function HomeScreen() {
                 <View style={styles.chatContainer}>
                     <ChatContainer />
                 </View>
-
-                {/* Auth overlay for manual auth actions */}
-                <AuthOverlay
-                    visible={authOverlayVisible}
-                    onClose={() => setAuthOverlayVisible(false)}
-                />
             </View>
-        </PanelContainer>
+        );
+    }
+
+    return (
+        <View style={styles.container}>
+            <PanelContainer
+                leftPanelVisible={leftPanelVisible}
+                rightPanelVisible={rightPanelVisible}
+                onCloseLeft={() => {
+                    console.log('onCloseLeft called');
+                    setLeftPanelVisible(false);
+                }}
+                onCloseRight={() => setRightPanelVisible(false)}
+                onOpenLeft={() => setLeftPanelVisible(true)}
+                messages={messages}
+            >
+                <View style={styles.header}>
+                    <ChatHeader
+                        onMenuPress={toggleLeftPanel}
+                        onSettingsPress={toggleRightPanel}
+                    />
+                </View>
+                <View style={styles.chatContainer}>
+                    <ChatContainer />
+                </View>
+            </PanelContainer>
+
+            <AuthOverlay
+                visible={authOverlayVisible}
+                onClose={() => setAuthOverlayVisible(false)}
+            />
+        </View>
     );
 } 
