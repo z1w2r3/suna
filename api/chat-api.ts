@@ -977,4 +977,57 @@ export const parseStreamContent = (rawData: string): ParsedContent | null => {
   } catch (error) {
     return null;
   }
+};
+
+// NEW CHAT - Initiate Agent API
+export const initiateAgent = async (
+  message: string,
+  options?: {
+    agent_id?: string;
+    model_name?: string;
+    enable_thinking?: boolean;
+    reasoning_effort?: string;
+    stream?: boolean;
+    enable_context_manager?: boolean;
+  }
+): Promise<{ thread_id: string; agent_run_id: string }> => {
+  console.log('[API] initiateAgent called with message:', message.substring(0, 50) + '...');
+
+  const supabase = createSupabaseClient();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new NoAccessTokenAvailableError();
+  }
+
+  const formData = new FormData();
+  formData.append('prompt', message);
+  formData.append('stream', String(options?.stream ?? true));
+  
+  if (options?.agent_id) formData.append('agent_id', options.agent_id);
+  if (options?.model_name) formData.append('model_name', options.model_name);
+  if (options?.enable_thinking !== undefined) formData.append('enable_thinking', String(options.enable_thinking));
+  if (options?.reasoning_effort) formData.append('reasoning_effort', options.reasoning_effort);
+  if (options?.enable_context_manager !== undefined) formData.append('enable_context_manager', String(options.enable_context_manager));
+
+  try {
+    const response = await fetch(`${SERVER_URL}/agent/initiate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('[API] initiateAgent success:', result);
+    return result;
+  } catch (error) {
+    console.error('[API] initiateAgent error:', error);
+    throw error;
+  }
 }; 

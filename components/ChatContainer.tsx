@@ -1,7 +1,7 @@
 import { commonStyles } from '@/constants/CommonStyles';
-import { useChatContext } from '@/hooks/useChatContext';
-import { useChatSession } from '@/hooks/useChatHooks';
+import { useChatSession, useNewChatSession } from '@/hooks/useChatHooks';
 import { useThemedStyles } from '@/hooks/useThemeColor';
+import { useIsNewChatMode, useSelectedProject } from '@/stores/ui-store';
 import React, { useEffect, useState } from 'react';
 import { Keyboard, KeyboardEvent, Platform, View } from 'react-native';
 import { ChatInput } from './ChatInput';
@@ -14,23 +14,38 @@ interface ChatContainerProps {
 }
 
 export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
-    const { selectedProject } = useChatContext();
+    const selectedProject = useSelectedProject();
+    const isNewChatMode = useIsNewChatMode();
     const [isAtBottomOfChat, setIsAtBottomOfChat] = useState(true);
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
+    // Use appropriate chat session based on mode
+    const projectChatSession = useChatSession(
+        (!isNewChatMode && selectedProject?.id && selectedProject.id !== 'new-chat-temp')
+            ? selectedProject.id
+            : ''
+    );
+    const newChatSession = useNewChatSession();
+
+    // Select the right session based on mode
+    const chatSession = isNewChatMode ? newChatSession : projectChatSession;
+
     const {
-        thread,
         messages,
-        isLoading,
-        isLoadingThread,
-        isLoadingMessages,
         sendMessage,
         stopAgent,
         isGenerating,
         streamContent,
         streamError,
-        isSending,
-    } = useChatSession(selectedProject?.id || '');
+    } = chatSession;
+
+    // For project mode, we still need these specific loading states
+    const { isLoadingThread, isLoadingMessages, isSending: projectIsSending } = isNewChatMode ?
+        { isLoadingThread: false, isLoadingMessages: false, isSending: false } :
+        projectChatSession;
+
+    // Get the correct isSending state based on mode
+    const isSending = isNewChatMode ? (newChatSession.isSending || false) : projectIsSending;
 
     // Track keyboard height for MessageThread padding
     useEffect(() => {
@@ -91,8 +106,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
         setIsAtBottomOfChat(isAtBottom);
     };
 
-    // Show loading state while thread is being fetched (NOT created)
-    if (selectedProject && isLoadingThread) {
+    // Show loading state while thread is being fetched (NOT created) - only for project mode
+    if (!isNewChatMode && selectedProject && isLoadingThread) {
         return (
             <View style={styles.loadingContainer}>
                 <SkeletonText lines={3} />
@@ -100,8 +115,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
         );
     }
 
-    // Show empty state when no project is selected
-    if (!selectedProject) {
+    // Show empty state when no project is selected - ONLY in project mode
+    if (!isNewChatMode && !selectedProject) {
         return (
             <View style={styles.emptyContainer}>
                 <Body style={styles.emptyText}>Select a project to start chatting</Body>
@@ -135,7 +150,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                         ? "AI is responding..."
                         : isSending
                             ? "Sending..."
-                            : `Chat with ${selectedProject.name}...`
+                            : isNewChatMode
+                                ? "Start a new conversation..."
+                                : `Chat with ${selectedProject?.name || 'project'}...`
                 }
                 isAtBottomOfChat={isAtBottomOfChat}
                 isGenerating={isGenerating}

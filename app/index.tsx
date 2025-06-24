@@ -3,20 +3,19 @@ import { ChatContainer } from '@/components/ChatContainer';
 import { ChatHeader } from '@/components/ChatHeader';
 import { PanelContainer } from '@/components/PanelContainer';
 import { Skeleton } from '@/components/Skeleton';
-import { useHeaderHeight } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
-import { useChatContext } from '@/hooks/useChatContext';
-import { useChatSession } from '@/hooks/useChatHooks';
+import { useChatSession, useNewChatSession } from '@/hooks/useChatHooks';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import {
+    useIsNewChatMode,
     useLeftPanelVisible,
     useRightPanelVisible,
+    useSelectedProject,
     useSetLeftPanelVisible,
     useSetRightPanelVisible
 } from '@/stores/ui-store';
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
     // Use store state instead of local state for panel visibility
@@ -28,12 +27,19 @@ export default function HomeScreen() {
     const [authOverlayVisible, setAuthOverlayVisible] = useState(false);
 
     const { user, loading } = useAuth();
-    const { selectedProject } = useChatContext();
-    const insets = useSafeAreaInsets();
-    const headerHeight = useHeaderHeight();
+    const selectedProject = useSelectedProject();
+    const isNewChatMode = useIsNewChatMode();
 
-    // Get messages from chat session
-    const { messages } = useChatSession(selectedProject?.id || '');
+    // Use appropriate chat session based on mode
+    const projectChatSession = useChatSession(
+        (!isNewChatMode && selectedProject?.id && selectedProject.id !== 'new-chat-temp')
+            ? selectedProject.id
+            : ''
+    );
+    const newChatSession = useNewChatSession();
+
+    // Select the right session based on mode
+    const { messages } = isNewChatMode ? newChatSession : projectChatSession;
 
     const toggleLeftPanel = () => setLeftPanelVisible(!leftPanelVisible);
     const toggleRightPanel = () => setRightPanelVisible(!rightPanelVisible);

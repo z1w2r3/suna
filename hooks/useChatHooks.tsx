@@ -5,6 +5,7 @@ import {
     getAgentRuns,
     getMessages,
     getThreadForProject,
+    initiateAgent,
     Message,
     ParsedContent,
     parseStreamContent,
@@ -13,7 +14,9 @@ import {
     streamAgent,
     Thread
 } from '@/api/chat-api';
-import { useSetCurrentTool, useSetIsGenerating } from '@/stores/ui-store';
+import { projectKeys } from '@/api/project-api';
+import { createSupabaseClient } from '@/constants/SupabaseConfig';
+import { useSetCurrentTool, useSetIsGenerating, useUpdateNewChatProject } from '@/stores/ui-store';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -33,7 +36,7 @@ export const useThreadForProject = (projectId: string) => {
     return useQuery({
         queryKey: chatKeys.thread(projectId),
         queryFn: () => getThreadForProject(projectId),
-        enabled: !!projectId && projectId !== '',
+        enabled: !!projectId && projectId !== '' && projectId !== 'new-chat-temp',
         staleTime: 5 * 60 * 1000, // 5 minutes
         retry: 1,
     });
@@ -217,6 +220,7 @@ export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
     const cleanupRef = useRef<(() => void) | null>(null);
     const isMountedRef = useRef(true);
     const currentRunIdRef = useRef<string | null>(null);
+    const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Convert ordered text content to string
     const orderedTextContent = textContent
@@ -227,6 +231,12 @@ export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
         if (!isMountedRef.current) return;
 
         console.log(`[useAgentStream] Finalizing stream with status: ${finalStatus}`);
+
+        // Clear any pending timeout
+        if (streamTimeoutRef.current) {
+            clearTimeout(streamTimeoutRef.current);
+            streamTimeoutRef.current = null;
+        }
 
         if (cleanupRef.current) {
             cleanupRef.current();
@@ -260,8 +270,26 @@ export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
         }
     }, [queryClient, threadId, setIsGenerating, setCurrentTool]);
 
+    // Set up stream timeout to prevent infinite loading
+    const resetStreamTimeout = useCallback(() => {
+        if (streamTimeoutRef.current) {
+            clearTimeout(streamTimeoutRef.current);
+        }
+
+        // Set 30 second timeout for stuck streams
+        streamTimeoutRef.current = setTimeout(() => {
+            if (!isMountedRef.current) return;
+            console.warn('[useAgentStream] Stream timeout - forcing completion');
+            setError('Stream timed out');
+            finalizeStream('error');
+        }, 30000); // 30 seconds
+    }, [finalizeStream]);
+
     const handleStreamMessage = useCallback((rawData: string) => {
         if (!isMountedRef.current) return;
+
+        // Reset timeout on each message
+        resetStreamTimeout();
 
         console.log(`[useAgentStream] Received raw data:`, rawData.substring(0, 200) + '...');
 
@@ -397,7 +425,7 @@ export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
                 setTextContent(prev => prev.concat({ content: parsed.content, sequence: 0 }));
             }
         }
-    }, [status, toolCall, finalizeStream, setIsGenerating, setCurrentTool]);
+    }, [status, toolCall, finalizeStream, setIsGenerating, setCurrentTool, resetStreamTimeout]);
 
     const handleStreamError = useCallback((err: Error | string) => {
         if (!isMountedRef.current) return;
@@ -591,4 +619,176 @@ export const useChatSession = (projectId: string) => {
     }
 
     return result;
+};
+
+// NEW CHAT SESSION HOOK
+export const useNewChatSession = () => {
+    const [threadId, setThreadId] = useState<string | null>(null);
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [isInitialized, setIsInitialized] = useState(false);
+    const [isSending, setIsSending] = useState(false);
+
+    const queryClient = useQueryClient();
+    const agentStream = useAgentStream(threadId || undefined);
+    const setIsGenerating = useSetIsGenerating();
+    const addMessage = useAddMessage();
+    const startAgentMutation = useStartAgent();
+    const updateNewChatProject = useUpdateNewChatProject();
+
+    // Fetch thread info when we have threadId to get project info
+    const { data: threadInfo } = useQuery({
+        queryKey: ['thread', threadId],
+        queryFn: async () => {
+            if (!threadId) return null;
+
+            // Try to get project from thread
+            const supabase = createSupabaseClient();
+            const { data } = await supabase
+                .from('threads')
+                .select(`
+                    *,
+                    projects!inner(*)
+                `)
+                .eq('thread_id', threadId)
+                .single();
+
+            return data;
+        },
+        enabled: !!threadId && isInitialized,
+        staleTime: Infinity, // Don't refetch once we have it
+    });
+
+    // Update project info when we get thread data
+    useEffect(() => {
+        if (threadInfo?.projects) {
+            const projectData = threadInfo.projects;
+            console.log('[useNewChatSession] Updating project with real data:', projectData);
+
+            updateNewChatProject({
+                id: projectData.project_id,
+                name: projectData.name || 'Untitled Project',
+                description: projectData.description || '',
+                account_id: projectData.account_id,
+                created_at: projectData.created_at,
+                updated_at: projectData.updated_at,
+                sandbox: projectData.sandbox || {},
+            });
+
+            // INVALIDATE PROJECTS QUERY so new project appears in regular list
+            console.log('[useNewChatSession] Invalidating projects query to refresh list');
+            queryClient.invalidateQueries({ queryKey: projectKeys.lists() });
+        }
+    }, [threadInfo, updateNewChatProject, queryClient]);
+
+    const sendMessage = useCallback(async (content: string) => {
+        try {
+            if (!isInitialized) {
+                // IMMEDIATELY set temp project BEFORE any async operations
+                console.log('[useNewChatSession] Setting temp project IMMEDIATELY');
+                updateNewChatProject({
+                    id: 'new-chat-temp',
+                    name: 'New Chat',
+                    description: 'Temporary project for new chat',
+                    account_id: '',
+                    sandbox: {},
+                });
+                console.log('[useNewChatSession] Temp project set, marking as initialized');
+                setIsInitialized(true); // Mark as initialized so left panel shows it
+            }
+
+            // ADD USER MESSAGE IMMEDIATELY (OPTIMISTIC UPDATE)
+            const optimisticUserMessage: Message = {
+                message_id: `user-temp-${Date.now()}`,
+                thread_id: threadId || 'temp',
+                type: 'user',
+                is_llm_message: false,
+                content: content,
+                metadata: {},
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            };
+
+            setMessages(prev => [...prev, optimisticUserMessage]);
+            setIsSending(true);
+            setIsGenerating(true);
+
+            if (!threadId) {
+                // First message - initiate new chat
+                console.log('[useNewChatSession] Initiating API call for new chat');
+
+                const result = await initiateAgent(content, {
+                    stream: true,
+                    enable_context_manager: true,
+                });
+
+                setThreadId(result.thread_id);
+                setIsSending(false);
+
+                // Update the optimistic message with real thread_id
+                setMessages(prev => prev.map(msg =>
+                    msg.message_id === optimisticUserMessage.message_id
+                        ? { ...msg, thread_id: result.thread_id, message_id: `user-${Date.now()}` }
+                        : msg
+                ));
+
+                // Start streaming immediately
+                agentStream.startStreaming(result.agent_run_id);
+            } else {
+                // Subsequent messages - use existing thread
+                console.log('[useNewChatSession] Adding message to existing thread:', threadId);
+
+                await addMessage.mutateAsync({
+                    threadId,
+                    content,
+                });
+                setIsSending(false);
+
+                const result = await startAgentMutation.mutateAsync({
+                    threadId,
+                });
+
+                agentStream.startStreaming(result.agent_run_id);
+            }
+        } catch (error) {
+            console.error('[useNewChatSession] Failed to send message:', error);
+            setIsGenerating(false);
+            setIsSending(false);
+
+            // Remove the optimistic message on error (if any)
+            setMessages(prev => prev.filter(msg => msg.message_id.startsWith('user-temp-')));
+            throw error;
+        }
+    }, [threadId, agentStream, setIsGenerating, addMessage, startAgentMutation, updateNewChatProject, isInitialized]);
+
+    const stopAgent = useCallback(() => {
+        console.log('[useNewChatSession] Stopping agent');
+        agentStream.stopStreaming();
+        setIsGenerating(false);
+        setIsSending(false);
+    }, [agentStream, setIsGenerating]);
+
+    // Load messages from API when thread is initialized
+    const { data: apiMessages } = useMessages(threadId || '');
+
+    // Merge local and API messages, prioritizing API messages when available
+    const allMessages = threadId && apiMessages && apiMessages.length > 0 ? apiMessages : messages;
+
+    // Convert textContent array to string for compatibility with MessageThread
+    const streamContentString = Array.isArray(agentStream.textContent)
+        ? agentStream.textContent.map(item => item.content).join('')
+        : agentStream.textContent || '';
+
+    return {
+        messages: allMessages,
+        threadId,
+        isInitialized,
+        sendMessage,
+        stopAgent,
+        isGenerating: agentStream.isStreaming,
+        streamContent: streamContentString,
+        streamError: agentStream.error,
+        streamStatus: agentStream.status,
+        isLoading: false,
+        isSending, // NOW WE HAVE PROPER SENDING STATE
+    };
 }; 

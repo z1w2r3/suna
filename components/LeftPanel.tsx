@@ -2,8 +2,8 @@ import { useProjects } from '@/api/project-api';
 import { fontWeights } from '@/constants/Fonts';
 import { usePanelTopOffset } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
-import { useChatContext } from '@/hooks/useChatContext';
 import { useThemedStyles } from '@/hooks/useThemeColor';
+import { useIsNewChatMode, useSelectedProject, useSetNewChatMode, useSetSelectedProject } from '@/stores/ui-store';
 import { SquarePen } from 'lucide-react-native';
 import React from 'react';
 import { ScrollView, TouchableOpacity, View } from 'react-native';
@@ -26,8 +26,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     // Use auth context
     const { user, signOut } = useAuth();
 
-    // Use chat context
-    const { selectedProject, setSelectedProject } = useChatContext();
+    // Use zustand for chat state
+    const selectedProject = useSelectedProject();
+    const setSelectedProject = useSetSelectedProject();
+    const isNewChatMode = useIsNewChatMode();
+    const setNewChatMode = useSetNewChatMode();
 
     const styles = useThemedStyles((theme) => ({
         panel: {
@@ -233,7 +236,26 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             );
         }
 
-        if (projects.length === 0) {
+        // Combine new chat project with regular projects
+        const allProjects = [];
+
+        // Add current selected project if it's from new chat session (temp or real)
+        if (isNewChatMode && selectedProject) {
+            allProjects.push({
+                id: selectedProject.id,
+                name: selectedProject.name,
+                isNewChat: true,
+            });
+        }
+
+        // Add regular projects - but skip if already added above to prevent duplicates
+        const selectedProjectId = isNewChatMode && selectedProject ? selectedProject.id : null;
+        allProjects.push(...projects
+            .filter(p => p.id !== selectedProjectId) // Prevent duplicates
+            .map(p => ({ ...p, isNewChat: false }))
+        );
+
+        if (allProjects.length === 0) {
             return (
                 <Body style={styles.emptyText}>
                     No projects found. Create your first project to get started.
@@ -241,7 +263,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             );
         }
 
-        return projects.map((project) => (
+        return allProjects.map((project) => (
             <TouchableOpacity
                 key={project.id}
                 style={[
@@ -270,9 +292,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     };
 
     const handleProjectSelect = (project: any) => {
-        console.log('Project selected:', project.name);
+        console.log('[LeftPanel] Project selected:', project.name, 'isNewChat:', project.isNewChat);
+
+        // If selecting a real project (not new chat), exit new chat mode
+        if (!project.isNewChat && project.id !== 'new-chat-temp') {
+            console.log('[LeftPanel] Selecting real project, exiting new chat mode');
+            setNewChatMode(false);
+        }
+
         setSelectedProject(project);
-        console.log('Calling onClose...');
+        console.log('[LeftPanel] Calling onClose...');
         onClose(); // Close the panel after selection
     };
 
@@ -291,7 +320,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
         <View style={styles.panel}>
             <View style={styles.header}>
                 <H3 style={styles.title}>Suna</H3>
-                <SquarePen size={22} strokeWidth={2} color={styles.title.color} />
+                <TouchableOpacity
+                    onPress={() => {
+                        console.log('[LeftPanel] Starting new chat from pen button');
+                        setSelectedProject(null); // Clear selected project
+                        setNewChatMode(true);
+                        onClose();
+                    }}
+                >
+                    <SquarePen size={22} strokeWidth={2} color={styles.title.color} />
+                </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -322,7 +360,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                 {/* Projects (previously Tasks) */}
                 <View style={styles.section}>
                     <View style={styles.tasksHeader}>
-                        <Caption style={styles.tasksTitle}>Tasks</Caption>
+                        <Caption style={styles.tasksTitle}>Chats</Caption>
                     </View>
 
                     {renderTasksSection()}

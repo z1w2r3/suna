@@ -26,6 +26,23 @@ export interface ToolCallSnapshot {
   isCompleted: boolean;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  account_id: string;
+  created_at: string;
+  updated_at?: string;
+  sandbox: {
+    vnc_preview?: string;
+    sandbox_url?: string;
+    id?: string;
+    pass?: string;
+  };
+  is_public?: boolean;
+  [key: string]: any;
+}
+
 export interface ToolViewState {
   selectedToolCall: any | null;
   selectedMessageId: string | null;
@@ -43,6 +60,10 @@ interface UIState {
   currentTool: CurrentTool | null;
   inputDraft: string;
   isTyping: boolean;
+  
+  // Chat/Project state
+  selectedProject: Project | null;
+  isNewChatMode: boolean;
   
   // File management (local device paths + download progress)
   fileDownloads: Map<string, FileDownload>;
@@ -65,6 +86,12 @@ interface UIState {
   setCurrentTool: (tool: CurrentTool | null) => void;
   setInputDraft: (draft: string) => void;
   setIsTyping: (typing: boolean) => void;
+  
+  // Chat/Project actions
+  setSelectedProject: (project: Project | null) => void;
+  setNewChatMode: (enabled: boolean) => void;
+  updateNewChatProject: (projectData: Partial<Project>) => void;
+  clearSelection: () => void;
   
   addFileDownload: (download: FileDownload) => void;
   updateFileDownload: (id: string, updates: Partial<FileDownload>) => void;
@@ -113,6 +140,8 @@ export const useUIStore = create<UIState>()(
     currentTool: null,
     inputDraft: '',
     isTyping: false,
+    selectedProject: null,
+    isNewChatMode: true,
     fileDownloads: new Map(),
     sidebarCollapsed: false,
     activePanel: null,
@@ -135,6 +164,27 @@ export const useUIStore = create<UIState>()(
     setCurrentTool: (tool) => set({ currentTool: tool }),
     setInputDraft: (draft) => set({ inputDraft: draft }),
     setIsTyping: (typing) => set({ isTyping: typing }),
+    
+    // Chat/Project actions
+    setSelectedProject: (project) => set({ selectedProject: project }),
+    setNewChatMode: (enabled) => set({ isNewChatMode: enabled }),
+         updateNewChatProject: (projectData) => set((state) => {
+       if (!state.isNewChatMode) return {};
+       
+       const updatedProject: Project = {
+         id: 'new-chat-temp',
+         name: 'New Chat',
+         description: 'Temporary project for new chat',
+         account_id: '',
+         sandbox: {},
+         created_at: new Date().toISOString(),
+         updated_at: new Date().toISOString(),
+         ...projectData,
+       };
+       
+       return { selectedProject: updatedProject };
+     }),
+    clearSelection: () => set({ selectedProject: null }),
     
     addFileDownload: (download) => set((state) => {
       const newDownloads = new Map(state.fileDownloads);
@@ -397,5 +447,13 @@ export const useUpdateToolSnapshots = () => useUIStore((state) => state.updateTo
 export const useNavigateToSnapshot = () => useUIStore((state) => state.navigateToSnapshot);
 export const useSetNavigationMode = () => useUIStore((state) => state.setNavigationMode);
 export const useJumpToLatest = () => useUIStore((state) => state.jumpToLatest);
+
+// Chat/Project state selectors
+export const useSelectedProject = () => useUIStore((state) => state.selectedProject);
+export const useIsNewChatMode = () => useUIStore((state) => state.isNewChatMode);
+export const useSetSelectedProject = () => useUIStore((state) => state.setSelectedProject);
+export const useSetNewChatMode = () => useUIStore((state) => state.setNewChatMode);
+export const useUpdateNewChatProject = () => useUIStore((state) => state.updateNewChatProject);
+export const useClearSelection = () => useUIStore((state) => state.clearSelection);
 
 // All selectors above are atomic and safe from infinite loops 

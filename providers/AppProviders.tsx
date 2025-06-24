@@ -1,5 +1,4 @@
 import { AuthProvider } from '@/hooks/useAuth';
-import { ChatProvider } from '@/hooks/useChatContext';
 import { cleanupAppState, initializeAppState, initializePersistence, queryClient } from '@/stores/query-client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import React, { useEffect } from 'react';
@@ -31,9 +30,7 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
     return (
         <QueryClientProvider client={queryClient}>
             <AuthProvider>
-                <ChatProvider>
-                    {children}
-                </ChatProvider>
+                {children}
             </AuthProvider>
         </QueryClientProvider>
     );
