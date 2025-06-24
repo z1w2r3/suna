@@ -1,5 +1,5 @@
 import { useTheme } from '@/hooks/useThemeColor';
-import { ArrowUp, Mic, Paperclip } from 'lucide-react-native';
+import { ArrowUp, Mic, Paperclip, Square } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Keyboard, KeyboardEvent, Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import Animated, {
@@ -16,16 +16,22 @@ interface ChatInputProps {
     onSendMessage: (message: string) => void;
     onAttachPress?: () => void;
     onMicPress?: () => void;
+    onCancelStream?: () => void;
     placeholder?: string;
     isAtBottomOfChat?: boolean;
+    isGenerating?: boolean;
+    isSending?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
     onSendMessage,
     onAttachPress,
     onMicPress,
+    onCancelStream,
     placeholder = 'Ask Suna anything...',
     isAtBottomOfChat = true,
+    isGenerating = false,
+    isSending = false,
 }) => {
     const [message, setMessage] = useState('');
     const theme = useTheme();
@@ -86,6 +92,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         };
     });
 
+    const shouldShowCancel = isSending || isGenerating;
+
     return (
         <>
             <Animated.View style={[
@@ -127,16 +135,27 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
                             <TouchableOpacity
                                 style={[styles.sendButton, {
-                                    backgroundColor: message.trim() ? theme.activeButton : theme.inactiveButton
+                                    backgroundColor: shouldShowCancel || message.trim()
+                                        ? theme.activeButton
+                                        : theme.inactiveButton
                                 }]}
-                                onPress={handleSend}
-                                disabled={!message.trim()}
+                                onPress={shouldShowCancel ? onCancelStream : handleSend}
+                                disabled={!shouldShowCancel && !message.trim()}
                             >
-                                <ArrowUp
-                                    size={19}
-                                    strokeWidth={3}
-                                    color={message.trim() ? theme.background : theme.disabledText}
-                                />
+                                {shouldShowCancel ? (
+                                    <Square
+                                        size={16}
+                                        strokeWidth={2}
+                                        color={theme.background}
+                                        fill={theme.background}
+                                    />
+                                ) : (
+                                    <ArrowUp
+                                        size={19}
+                                        strokeWidth={3}
+                                        color={message.trim() ? theme.background : theme.disabledText}
+                                    />
+                                )}
                             </TouchableOpacity>
                         </View>
                     </View>

@@ -57,7 +57,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
             flex: 1,
             height: '100%' as const,
             paddingTop: insets.top,
-            paddingBottom: insets.bottom,
+            paddingBottom: 0, // Remove bottom padding to let timeline handle it
         },
         header: {
             flexDirection: 'row' as const,
@@ -92,6 +92,10 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
         content: {
             flex: 1,
         },
+        toolViewContainer: {
+            flexGrow: 1,
+            backgroundColor: theme.background,
+        },
         emptyContainer: {
             flex: 1,
             justifyContent: 'center' as const,
@@ -121,44 +125,30 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
         timelineContainer: {
             borderTopWidth: 1,
             borderTopColor: theme.border,
-            backgroundColor: theme.muted + '10',
-            paddingHorizontal: 16,
-            paddingVertical: 12,
+            backgroundColor: theme.sidebar,
+            paddingHorizontal: 20,
+            paddingVertical: 16,
+            paddingBottom: 16 + insets.bottom, // Add safe area padding
         },
-        timelineControls: {
+        timelineHeader: {
             flexDirection: 'row' as const,
+            justifyContent: 'space-between' as const,
             alignItems: 'center' as const,
-        },
-        navButton: {
-            width: 28,
-            height: 28,
-            borderRadius: 14,
-            backgroundColor: theme.muted + '20',
-            justifyContent: 'center' as const,
-            alignItems: 'center' as const,
-        },
-        navButtonDisabled: {
-            opacity: 0.5,
+            marginBottom: 12,
         },
         counter: {
-            color: theme.mutedForeground,
-            fontSize: 12,
+            color: theme.foreground,
+            fontSize: 13,
+            fontWeight: '600' as const,
             fontFamily: 'monospace',
-            minWidth: 50,
-            textAlign: 'center' as const,
-            marginHorizontal: 8,
         },
-        slider: {
-            flex: 1,
-            marginHorizontal: 12,
-        },
-        statusButton: {
+        statusBadge: {
             flexDirection: 'row' as const,
             alignItems: 'center' as const,
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 12,
-            minWidth: 100,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 16,
+            borderWidth: 1,
         },
         statusDot: {
             width: 6,
@@ -169,6 +159,28 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
         statusText: {
             fontSize: 11,
             fontWeight: '600' as const,
+        },
+        sliderContainer: {
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
+            marginBottom: 8,
+        },
+        navButton: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: theme.muted,
+            justifyContent: 'center' as const,
+            alignItems: 'center' as const,
+        },
+        navButtonDisabled: {
+            opacity: 0.3,
+            backgroundColor: theme.muted + '50',
+        },
+        slider: {
+            flex: 1,
+            height: 24,
+            marginHorizontal: 16,
         },
         runningBadge: {
             flexDirection: 'row' as const,
@@ -223,47 +235,43 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
         jumpToLatest();
     }, [jumpToLatest]);
 
-    const renderStatusButton = () => {
-        if (isLiveMode) {
-            if (isGenerating) {
-                return (
-                    <View style={[styles.statusButton, { backgroundColor: theme.primary + '20' }]}>
-                        <View style={[styles.statusDot, { backgroundColor: theme.primary }]} />
-                        <Caption style={[styles.statusText, { color: theme.primary }]}>Live Updates</Caption>
-                    </View>
-                );
-            } else {
-                return (
-                    <View style={[styles.statusButton, { backgroundColor: theme.muted + '20' }]}>
-                        <View style={[styles.statusDot, { backgroundColor: theme.mutedForeground }]} />
-                        <Caption style={[styles.statusText, { color: theme.mutedForeground }]}>Latest Tool</Caption>
-                    </View>
-                );
-            }
+    const renderStatusBadge = () => {
+        const isOnLatest = currentSnapshotIndex === totalSnapshots - 1;
+
+        if (isGenerating) {
+            return (
+                <View style={[styles.statusBadge, {
+                    backgroundColor: theme.primary + '10',
+                    borderColor: theme.primary + '30'
+                }]}>
+                    <View style={[styles.statusDot, { backgroundColor: theme.primary }]} />
+                    <Caption style={[styles.statusText, { color: theme.primary }]}>Live</Caption>
+                </View>
+            );
+        } else if (isOnLatest) {
+            return (
+                <View style={[styles.statusBadge, {
+                    backgroundColor: theme.accent + '10',
+                    borderColor: theme.accent + '30'
+                }]}>
+                    <View style={[styles.statusDot, { backgroundColor: theme.accent }]} />
+                    <Caption style={[styles.statusText, { color: theme.accent }]}>Latest</Caption>
+                </View>
+            );
         } else {
-            if (showJumpToLive) {
-                return (
-                    <TouchableOpacity
-                        style={[styles.statusButton, { backgroundColor: theme.primary + '20' }]}
-                        onPress={handleJumpToLatest}
-                    >
-                        <View style={[styles.statusDot, { backgroundColor: theme.primary }]} />
-                        <Caption style={[styles.statusText, { color: theme.primary }]}>Jump to Live</Caption>
-                    </TouchableOpacity>
-                );
-            } else if (showJumpToLatest) {
-                return (
-                    <TouchableOpacity
-                        style={[styles.statusButton, { backgroundColor: theme.accent + '20' }]}
-                        onPress={handleJumpToLatest}
-                    >
-                        <View style={[styles.statusDot, { backgroundColor: theme.accent }]} />
-                        <Caption style={[styles.statusText, { color: theme.accent }]}>Jump to Latest</Caption>
-                    </TouchableOpacity>
-                );
-            }
+            return (
+                <TouchableOpacity
+                    style={[styles.statusBadge, {
+                        backgroundColor: theme.muted + '20',
+                        borderColor: theme.border
+                    }]}
+                    onPress={handleJumpToLatest}
+                >
+                    <View style={[styles.statusDot, { backgroundColor: theme.mutedForeground }]} />
+                    <Caption style={[styles.statusText, { color: theme.mutedForeground }]}>Jump to latest</Caption>
+                </TouchableOpacity>
+            );
         }
-        return null;
     };
 
     if (!isVisible) return null;
@@ -316,7 +324,12 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
                 </View>
             </View>
 
-            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <ScrollView
+                style={styles.content}
+                contentContainerStyle={styles.toolViewContainer}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+            >
                 <GenericToolView
                     toolCall={currentSnapshot?.toolCall}
                     isStreaming={isGenerating}
@@ -327,25 +340,20 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
             {/* Timeline controls at bottom */}
             {totalSnapshots > 1 && (
                 <View style={styles.timelineContainer}>
-                    <View style={styles.timelineControls}>
+                    <View style={styles.timelineHeader}>
+                        <Caption style={styles.counter}>
+                            {currentSnapshotIndex + 1} / {totalSnapshots}
+                        </Caption>
+                        {renderStatusBadge()}
+                    </View>
+
+                    <View style={styles.sliderContainer}>
                         <TouchableOpacity
                             style={[styles.navButton, !canGoPrevious && styles.navButtonDisabled]}
                             onPress={handlePrevious}
                             disabled={!canGoPrevious}
                         >
-                            <ChevronLeft size={16} color={styles.title.color} />
-                        </TouchableOpacity>
-
-                        <Caption style={styles.counter}>
-                            {currentSnapshotIndex + 1}/{totalSnapshots}
-                        </Caption>
-
-                        <TouchableOpacity
-                            style={[styles.navButton, !canGoNext && styles.navButtonDisabled]}
-                            onPress={handleNext}
-                            disabled={!canGoNext}
-                        >
-                            <ChevronRight size={16} color={styles.title.color} />
+                            <ChevronLeft size={16} color={canGoPrevious ? theme.foreground : theme.mutedForeground} />
                         </TouchableOpacity>
 
                         <Slider
@@ -356,11 +364,17 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
                             value={currentSnapshotIndex}
                             onValueChange={handleSliderChange}
                             minimumTrackTintColor={theme.primary}
-                            maximumTrackTintColor={theme.muted}
+                            maximumTrackTintColor={theme.muted + '40'}
                             thumbTintColor={theme.primary}
                         />
 
-                        {renderStatusButton()}
+                        <TouchableOpacity
+                            style={[styles.navButton, !canGoNext && styles.navButtonDisabled]}
+                            onPress={handleNext}
+                            disabled={!canGoNext}
+                        >
+                            <ChevronRight size={16} color={canGoNext ? theme.foreground : theme.mutedForeground} />
+                        </TouchableOpacity>
                     </View>
                 </View>
             )}

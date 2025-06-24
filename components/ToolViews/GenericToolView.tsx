@@ -1,7 +1,7 @@
 import { useTheme } from '@/hooks/useThemeColor';
 import { formatToolNameForDisplay } from '@/utils/xml-parser';
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Body, Caption, H4 } from '../Typography';
 
 export interface GenericToolViewProps {
@@ -100,7 +100,7 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
             : 'Failed';
 
     return (
-        <ScrollView style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
             <View style={styles.header}>
                 <H4 style={styles.toolName}>{toolName}</H4>
                 <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
@@ -123,6 +123,6 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
                     ))}
                 </View>
             )}
-        </ScrollView>
+        </View>
     );
 }; 

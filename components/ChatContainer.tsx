@@ -129,6 +129,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                 onSendMessage={(content: string) => {
                     sendMessage(content);
                 }}
+                onCancelStream={stopAgent}
                 placeholder={
                     isGenerating
                         ? "AI is responding..."
@@ -137,6 +138,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                             : `Chat with ${selectedProject.name}...`
                 }
                 isAtBottomOfChat={isAtBottomOfChat}
+                isGenerating={isGenerating}
+                isSending={isSending}
             />
         </View>
     );

@@ -3,16 +3,18 @@ import { PanelLeft, PanelRightOpen } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { H4 } from './Typography';
+import { H6 } from './Typography';
 
 interface ChatHeaderProps {
     onMenuPress?: () => void;
     onSettingsPress?: () => void;
+    selectedProject?: { id: string; name: string } | null;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
     onMenuPress,
     onSettingsPress,
+    selectedProject,
 }) => {
     const theme = useTheme();
     const insets = useSafeAreaInsets();
@@ -27,7 +29,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 <PanelLeft size={20} color={theme.foreground} />
             </TouchableOpacity>
 
-            <H4 style={{ color: theme.foreground }}>Suna</H4>
+            <H6 style={{ color: theme.foreground }}>
+                {selectedProject?.name || 'Suna'}
+            </H6>
 
             <TouchableOpacity style={styles.button} onPress={onSettingsPress}>
                 <PanelRightOpen size={20} color={theme.foreground} />

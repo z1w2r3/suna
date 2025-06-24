@@ -550,11 +550,22 @@ export const useChatSession = (projectId: string) => {
     }, [ensureThread, addMessage, startAgentMutation, agentStream, setIsGenerating]);
 
     const stopAgent = useCallback(() => {
-        if (agentStream.agentRunId) {
-            stopAgentMutation.mutate(agentStream.agentRunId);
-        }
+        console.log('[useChatSession] STOP AGENT CALLED - forcing immediate stop');
+
+        // ALWAYS stop streaming first - this is critical
         agentStream.stopStreaming();
-    }, [agentStream, stopAgentMutation]);
+
+        // ALWAYS reset generating state immediately
+        setIsGenerating(false);
+
+        // Try to stop backend agent if we have an ID
+        if (agentStream.agentRunId) {
+            console.log('[useChatSession] Stopping backend agent:', agentStream.agentRunId);
+            stopAgentMutation.mutate(agentStream.agentRunId);
+        } else {
+            console.log('[useChatSession] No agentRunId - only stopped local streaming');
+        }
+    }, [agentStream, stopAgentMutation, setIsGenerating]);
 
     const result = {
         thread,

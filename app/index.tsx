@@ -69,6 +69,7 @@ export default function HomeScreen() {
                     <ChatHeader
                         onMenuPress={toggleLeftPanel}
                         onSettingsPress={toggleRightPanel}
+                        selectedProject={selectedProject}
                     />
                 </View>
                 <View style={styles.chatContainer}>
@@ -95,6 +96,7 @@ export default function HomeScreen() {
                     <ChatHeader
                         onMenuPress={toggleLeftPanel}
                         onSettingsPress={toggleRightPanel}
+                        selectedProject={selectedProject}
                     />
                 </View>
                 <View style={styles.chatContainer}>

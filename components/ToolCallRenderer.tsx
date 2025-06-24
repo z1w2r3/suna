@@ -58,13 +58,14 @@ export const ToolCallRenderer: React.FC<ToolCallRendererProps> = ({
 
 const styles = StyleSheet.create({
     container: {
+
         marginVertical: 4,
     },
     toolCall: {
         paddingHorizontal: 12,
         paddingVertical: 8,
         marginVertical: 2,
-        borderRadius: 8,
+        borderRadius: 16,
         borderWidth: 1,
     },
     toolHeader: {
