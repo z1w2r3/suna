@@ -2,7 +2,8 @@ import { Message } from '@/api/chat-api';
 import { commonStyles } from '@/constants/CommonStyles';
 import { fontWeights } from '@/constants/Fonts';
 import { useTheme } from '@/hooks/useThemeColor';
-import { useCurrentTool, useIsGenerating, useOpenToolView, useUpdateToolSnapshots } from '@/stores/ui-store';
+import { useCurrentTool, useIsGenerating, useOpenToolView, useSelectedProject, useUpdateToolSnapshots } from '@/stores/ui-store';
+import { parseFileAttachments } from '@/utils/file-parser';
 import { Markdown } from '@/utils/markdown-renderer';
 import { parseMessage, processStreamContent } from '@/utils/message-parser';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -14,6 +15,7 @@ import Animated, {
     withSequence,
     withTiming
 } from 'react-native-reanimated';
+import { AttachmentGroup } from './AttachmentGroup';
 import { MessageActionModal } from './MessageActionModal';
 import { SkeletonChatMessages } from './Skeleton';
 import { ToolCallRenderer } from './ToolCallRenderer';
@@ -21,6 +23,7 @@ import { Body } from './Typography';
 
 interface MessageItemProps {
     message: Message;
+    sandboxId?: string;
     isStreaming?: boolean;
     streamContent?: string;
     isHidden?: boolean;
@@ -28,7 +31,7 @@ interface MessageItemProps {
     onToolPress?: (toolCall: any, messageId: string) => void;
 }
 
-const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamContent, isHidden, onLongPress, onToolPress }) => {
+const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, streamContent, isHidden, onLongPress, onToolPress }) => {
     const theme = useTheme();
     const messageRef = useRef<View>(null);
 
@@ -38,12 +41,18 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
         isStreaming && streamContent ? processStreamContent(streamContent) : null,
         [isStreaming, streamContent]);
 
+    // Apply file parsing to the already-cleaned content from parseMessage
+    const { attachments, cleanContent: fileCleanContent } = useMemo(() =>
+        parseFileAttachments(parsedMessage.cleanContent), [parsedMessage.cleanContent]);
+
     const displayContent = useMemo(() => {
         if (isStreaming && streamProcessed) {
-            return streamProcessed.cleanContent || parsedMessage.cleanContent;
+            // For streaming, use stream content if available, otherwise use file-cleaned content
+            return streamProcessed.cleanContent || fileCleanContent;
         }
-        return parsedMessage.cleanContent;
-    }, [isStreaming, streamProcessed, parsedMessage.cleanContent]);
+        // Use the file-cleaned content (which removes file attachments from already-cleaned content)
+        return fileCleanContent;
+    }, [isStreaming, streamProcessed, fileCleanContent]);
 
     const handleLongPress = () => {
         if (messageRef.current) {
@@ -53,7 +62,17 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
         }
     };
 
+    const handleFilePress = (filepath: string) => {
+        // Handle file press - could open file viewer or download
+        console.log('File pressed:', filepath);
+    };
+
     const isUser = message.type === 'user';
+
+    // Debug logging for message type
+    if (attachments.length > 0) {
+        console.log(`[MessageThread] Message ${message.message_id}: type="${message.type}", isUser=${isUser}, attachments=${attachments.length}`);
+    }
 
     if (isUser) {
         const bubbleColor = theme.messageBubble;
@@ -70,6 +89,18 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
                         <Body style={[styles.messageText, { color: theme.userMessage }]}>
                             {displayContent}
                         </Body>
+
+                        {/* Render file attachments for user messages */}
+                        {attachments.length > 0 && (
+                            <AttachmentGroup
+                                attachments={attachments}
+                                onFilePress={handleFilePress}
+                                layout="grid"
+                                showPreviews={true}
+                                maxHeight={120}
+                                sandboxId={sandboxId}
+                            />
+                        )}
                     </Animated.View>
                 </TouchableOpacity>
             </View>
@@ -81,6 +112,17 @@ const MessageItem = memo<MessageItemProps>(({ message, isStreaming, streamConten
                     <Markdown style={[styles.markdownContent]}>
                         {displayContent}
                     </Markdown>
+                )}
+
+                {/* Render file attachments for AI messages */}
+                {attachments.length > 0 && (
+                    <AttachmentGroup
+                        attachments={attachments}
+                        onFilePress={handleFilePress}
+                        layout="grid"
+                        showPreviews={true}
+                        sandboxId={sandboxId}
+                    />
                 )}
 
                 {parsedMessage.hasTools && (
@@ -156,10 +198,14 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     keyboardHeight = 0,
 }) => {
     const theme = useTheme();
+    const selectedProject = useSelectedProject();
     const flatListRef = useRef<FlatList>(null);
     const [isAtBottom, setIsAtBottom] = useState(true);
     const currentScrollOffset = useRef(0);
     const isFirstLoad = useRef(true);
+
+    // Get sandboxId from selected project
+    const sandboxId = selectedProject?.sandbox?.id;
 
     // Modal state
     const [modalVisible, setModalVisible] = useState(false);
@@ -311,6 +357,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         return (
             <MessageItem
                 message={item}
+                sandboxId={sandboxId}
                 isStreaming={isStreamingMessage && showGenerating}
                 streamContent={isStreamingMessage ? streamContent : undefined}
                 isHidden={item.message_id === selectedMessageId}

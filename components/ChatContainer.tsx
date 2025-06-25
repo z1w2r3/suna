@@ -142,6 +142,8 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
             </View>
             <ChatInput
                 onSendMessage={(content: string) => {
+                    // For new chat mode, we can pass files in the first message
+                    // Files are already handled within ChatInput for uploads
                     sendMessage(content);
                 }}
                 onCancelStream={stopAgent}

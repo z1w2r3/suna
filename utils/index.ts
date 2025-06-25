@@ -1,5 +1,7 @@
 // Main parser system exports
-export { Markdown, processUnicodeContent } from './markdown-renderer';
+export * from './file-parser';
+export * from './file-upload';
+export * from './markdown-renderer';
 export * from './message-parser';
 export * from './metadata-parser';
 export * from './safe-json-parser';
@@ -12,3 +14,4 @@ export { extractContentText, findLinkedToolResults, groupRelatedMessages, parseM
 export { safeJsonParse } from './safe-json-parser';
 export { parseToolResult } from './tool-result-parser';
 export { extractToolNameFromStream, isNewXmlFormat, parseXmlToolCalls } from './xml-parser';
+

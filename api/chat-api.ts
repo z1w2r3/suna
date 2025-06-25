@@ -989,6 +989,7 @@ export const initiateAgent = async (
     reasoning_effort?: string;
     stream?: boolean;
     enable_context_manager?: boolean;
+    files?: any[]; // Add files parameter
   }
 ): Promise<{ thread_id: string; agent_run_id: string }> => {
   console.log('[API] initiateAgent called with message:', message.substring(0, 50) + '...');
@@ -1009,6 +1010,18 @@ export const initiateAgent = async (
   if (options?.enable_thinking !== undefined) formData.append('enable_thinking', String(options.enable_thinking));
   if (options?.reasoning_effort) formData.append('reasoning_effort', options.reasoning_effort);
   if (options?.enable_context_manager !== undefined) formData.append('enable_context_manager', String(options.enable_context_manager));
+
+  // Add files to FormData if provided
+  if (options?.files?.length) {
+    options.files.forEach((file) => {
+      const normalizedName = file.name || file.fileName || 'unknown_file';
+      formData.append('files', {
+        uri: file.localUri || file.uri,
+        name: normalizedName,
+        type: file.type || file.mimeType || 'application/octet-stream',
+      } as any, normalizedName);
+    });
+  }
 
   try {
     const response = await fetch(`${SERVER_URL}/agent/initiate`, {

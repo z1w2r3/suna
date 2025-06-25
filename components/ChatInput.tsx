@@ -1,4 +1,7 @@
+import { AttachmentGroup } from '@/components/AttachmentGroup';
 import { useTheme } from '@/hooks/useThemeColor';
+import { useSelectedProject } from '@/stores/ui-store';
+import { handleLocalFiles, pickFiles, UploadedFile, uploadFilesToSandbox } from '@/utils/file-upload';
 import { ArrowUp, Mic, Paperclip, Square } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Keyboard, KeyboardEvent, Platform, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
@@ -34,8 +37,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     isSending = false,
 }) => {
     const [message, setMessage] = useState('');
+    const [attachedFiles, setAttachedFiles] = useState<UploadedFile[]>([]);
+    const selectedProject = useSelectedProject();
     const theme = useTheme();
     const insets = useSafeAreaInsets();
+
+    // Get sandboxId from selected project
+    const sandboxId = selectedProject?.sandbox?.id;
 
     const keyboardHeight = useSharedValue(0);
 
@@ -67,10 +75,63 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }, []);
 
     const handleSend = () => {
-        if (message.trim()) {
-            onSendMessage(message.trim());
+        if (message.trim() || attachedFiles.length > 0) {
+            let finalMessage = message.trim();
+
+            // Add file attachments to message
+            if (attachedFiles.length > 0) {
+                const fileInfo = attachedFiles
+                    .map(file => `[Uploaded File: ${file.path}]`)
+                    .join('\n');
+                finalMessage = finalMessage ? `${finalMessage}\n\n${fileInfo}` : fileInfo;
+            }
+
+            // Pass the message to the handler
+            onSendMessage(finalMessage);
             setMessage('');
+            setAttachedFiles([]);
         }
+    };
+
+    const handleAttachPress = async () => {
+        try {
+            const result = await pickFiles();
+
+            if (result.cancelled || !result.files?.length) {
+                return;
+            }
+
+            if (sandboxId) {
+                // Upload to sandbox - files shown immediately with loading state
+                await uploadFilesToSandbox(
+                    result.files,
+                    sandboxId,
+                    (files: UploadedFile[]) => setAttachedFiles(prev => [...prev, ...files]),
+                    (filePath: string, status: { isUploading?: boolean; uploadError?: string }) => {
+                        setAttachedFiles(prev => prev.map(file =>
+                            file.path === filePath
+                                ? { ...file, ...status }
+                                : file
+                        ));
+                    }
+                );
+            } else {
+                // Store locally - files shown immediately
+                handleLocalFiles(
+                    result.files,
+                    () => { }, // We don't need pending files state here
+                    (files: UploadedFile[]) => setAttachedFiles(prev => [...prev, ...files])
+                );
+            }
+
+            onAttachPress?.();
+        } catch (error) {
+            console.error('File attach error:', error);
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setAttachedFiles(prev => prev.filter((_, i) => i !== index));
     };
 
     const containerStyle = useAnimatedStyle(() => {
@@ -110,6 +171,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 containerStyle
             ]}>
                 <View style={[styles.inputContainer, { backgroundColor: theme.sidebar }]}>
+                    {/* File attachments preview */}
+                    {attachedFiles.length > 0 && (
+                        <AttachmentGroup
+                            attachments={attachedFiles}
+                            layout="inline"
+                            showPreviews={true}
+                            maxHeight={100}
+                            sandboxId={sandboxId}
+                            onFilePress={(filepath) => {
+                                const index = attachedFiles.findIndex(file => file.path === filepath);
+                                if (index > -1) removeFile(index);
+                            }}
+                        />
+                    )}
+
                     <TextInput
                         style={[styles.textInput, { color: theme.foreground }]}
                         value={message}
@@ -124,7 +200,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     />
 
                     <View style={styles.buttonContainer}>
-                        <TouchableOpacity style={styles.actionButton} onPress={onAttachPress}>
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={handleAttachPress}
+                        >
                             <Paperclip size={20} strokeWidth={2} color={theme.placeholderText} />
                         </TouchableOpacity>
 
@@ -135,12 +214,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
                             <TouchableOpacity
                                 style={[styles.sendButton, {
-                                    backgroundColor: shouldShowCancel || message.trim()
+                                    backgroundColor: shouldShowCancel || message.trim() || attachedFiles.length > 0
                                         ? theme.activeButton
                                         : theme.inactiveButton
                                 }]}
                                 onPress={shouldShowCancel ? onCancelStream : handleSend}
-                                disabled={!shouldShowCancel && !message.trim()}
+                                disabled={!shouldShowCancel && !message.trim() && attachedFiles.length === 0}
                             >
                                 {shouldShowCancel ? (
                                     <Square
@@ -153,7 +232,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     <ArrowUp
                                         size={19}
                                         strokeWidth={3}
-                                        color={message.trim() ? theme.background : theme.disabledText}
+                                        color={message.trim() || attachedFiles.length > 0 ? theme.background : theme.disabledText}
                                     />
                                 )}
                             </TouchableOpacity>

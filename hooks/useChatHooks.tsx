@@ -680,7 +680,7 @@ export const useNewChatSession = () => {
         }
     }, [threadInfo, updateNewChatProject, queryClient]);
 
-    const sendMessage = useCallback(async (content: string) => {
+    const sendMessage = useCallback(async (content: string, files?: any[]) => {
         try {
             if (!isInitialized) {
                 // IMMEDIATELY set temp project BEFORE any async operations
@@ -719,6 +719,7 @@ export const useNewChatSession = () => {
                 const result = await initiateAgent(content, {
                     stream: true,
                     enable_context_manager: true,
+                    files: files // Pass files to initiateAgent
                 });
 
                 setThreadId(result.thread_id);
