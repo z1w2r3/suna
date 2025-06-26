@@ -117,7 +117,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 );
             } else {
                 // Store locally - files shown immediately
-                handleLocalFiles(
+                await handleLocalFiles(
                     result.files,
                     () => { }, // We don't need pending files state here
                     (files: UploadedFile[]) => setAttachedFiles(prev => [...prev, ...files])
@@ -167,6 +167,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     shadowOffset: { width: 0, height: -1 },
                     shadowOpacity: 1,
                     shadowRadius: 0,
+                    paddingVertical: attachedFiles.length > 0 ? 0 : 12,
                 },
                 containerStyle
             ]}>
@@ -180,9 +181,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             maxHeight={100}
                             sandboxId={sandboxId}
                             onFilePress={(filepath) => {
-                                const index = attachedFiles.findIndex(file => file.path === filepath);
-                                if (index > -1) removeFile(index);
+                                // Don't remove on file press in inline mode, let X button handle it
+                                console.log('File pressed:', filepath);
                             }}
+                            onRemove={removeFile}
                         />
                     )}
 
@@ -249,7 +251,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 const styles = StyleSheet.create({
     container: {
         paddingHorizontal: 10,
-        paddingVertical: 12,
+        paddingVertical: 0,
     },
     inputContainer: {
         borderRadius: 20,

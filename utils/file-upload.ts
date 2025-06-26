@@ -1,5 +1,6 @@
 import { SERVER_URL } from '@/constants/Server';
-import { supabase } from '@/constants/SupabaseConfig';
+import { createSupabaseClient } from '@/constants/SupabaseConfig';
+import { cacheUploadedFile } from '@/hooks/useImageContent';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
@@ -12,6 +13,7 @@ export interface UploadedFile {
   localUri?: string;
   isUploading?: boolean;
   uploadError?: string;
+  cachedBlob?: Blob;
 }
 
 export interface FileUploadResult {
@@ -123,12 +125,30 @@ const pickFromDocuments = async (): Promise<{ cancelled: boolean; files?: any[] 
   return { cancelled: false, files: result.assets };
 };
 
+// Helper function to create blob from file URI
+const createBlobFromUri = async (uri: string, mimeType: string): Promise<Blob | null> => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    
+    // Ensure correct MIME type
+    if (blob.type !== mimeType) {
+      return new Blob([blob], { type: mimeType });
+    }
+    
+    return blob;
+  } catch (error) {
+    console.warn('[FILE_UPLOAD] Failed to create blob from URI:', error);
+    return null;
+  }
+};
+
 // Handle local files (when no sandbox) - show immediately
-export const handleLocalFiles = (
+export const handleLocalFiles = async (
   files: any[],
   setPendingFiles: (files: File[]) => void,
   addUploadedFiles: (files: UploadedFile[]) => void
-): UploadedFile[] => {
+): Promise<UploadedFile[]> => {
   const validFiles: UploadedFile[] = [];
 
   for (const file of files) {
@@ -139,14 +159,22 @@ export const handleLocalFiles = (
 
     const fileName = file.name || file.fileName || 'unknown_file';
     const normalizedName = normalizeFilenameToNFC(fileName);
+    const mimeType = file.mimeType || file.type || 'application/octet-stream';
+    
+    // Create blob for optimistic caching (images only)
+    let cachedBlob: Blob | undefined;
+    if (file.uri && mimeType.startsWith('image/')) {
+      cachedBlob = await createBlobFromUri(file.uri, mimeType) || undefined;
+    }
     
     const uploadedFile: UploadedFile = {
       name: normalizedName,
       path: `/workspace/${normalizedName}`,
       size: file.size || 0,
-      type: file.mimeType || file.type || 'application/octet-stream',
+      type: mimeType,
       localUri: file.uri,
-      isUploading: false // Local files don't need uploading
+      isUploading: false, // Local files don't need uploading
+      cachedBlob,
     };
 
     validFiles.push(uploadedFile);
@@ -169,7 +197,7 @@ export const uploadFilesToSandbox = async (
   const uploadedFiles: UploadedFile[] = [];
   const filesToShow: UploadedFile[] = [];
 
-  // First, show all files immediately with loading state
+  // First, show all files immediately with loading state + optimistic caching
   for (const file of files) {
     if (file.size && file.size > MAX_FILE_SIZE) {
       Alert.alert('File Too Large', `File size exceeds 50MB limit: ${file.name || 'Unknown file'}`);
@@ -179,14 +207,28 @@ export const uploadFilesToSandbox = async (
     const fileName = file.name || file.fileName || 'unknown_file';
     const normalizedName = normalizeFilenameToNFC(fileName);
     const uploadPath = `/workspace/${normalizedName}`;
+    const mimeType = file.mimeType || file.type || 'application/octet-stream';
+
+    // Create blob for optimistic caching (images only)
+    let cachedBlob: Blob | undefined;
+    if (file.uri && mimeType.startsWith('image/')) {
+      cachedBlob = await createBlobFromUri(file.uri, mimeType) || undefined;
+      
+      // Cache optimistically
+      if (cachedBlob) {
+        cacheUploadedFile(sandboxId, uploadPath, cachedBlob);
+        console.log(`[FILE_UPLOAD] Cached image optimistically: ${uploadPath}`);
+      }
+    }
 
     const uploadedFile: UploadedFile = {
       name: normalizedName,
       path: uploadPath,
       size: file.size || 0,
-      type: file.mimeType || file.type || 'application/octet-stream',
+      type: mimeType,
       localUri: file.uri,
-      isUploading: true // Show loading immediately
+      isUploading: true, // Show loading immediately
+      cachedBlob,
     };
 
     filesToShow.push(uploadedFile);
@@ -221,6 +263,7 @@ export const uploadFilesToSandbox = async (
       formData.append('path', uploadPath);
 
       // Get auth token
+      const supabase = createSupabaseClient();
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
       if (sessionError || !session?.access_token) {

@@ -13,6 +13,7 @@ interface FileAttachmentProps {
     layout?: 'inline' | 'grid';
     isUploading?: boolean;
     uploadError?: string;
+    uploadedBlob?: Blob; // For optimistic caching
 }
 
 const getFileIcon = (type: FileType) => {
@@ -53,7 +54,8 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
     showPreview = true,
     layout = 'inline',
     isUploading = false,
-    uploadError
+    uploadError,
+    uploadedBlob
 }) => {
     const theme = useTheme();
     const filename = filepath.split('/').pop() || 'file';
@@ -72,8 +74,13 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
     const {
         data: imageUrl,
         isLoading: imageLoading,
-        error: imageError
-    } = useImageContent(isImage && sandboxId ? sandboxId : undefined, isImage ? filepath : undefined);
+        error: imageError,
+        isProcessing
+    } = useImageContent(
+        isImage && sandboxId ? sandboxId : undefined,
+        isImage ? filepath : undefined,
+        uploadedBlob
+    );
 
     const handlePress = () => {
         onPress?.(filepath);
@@ -110,12 +117,17 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
                     activeOpacity={0.8}
                 >
                     <ActivityIndicator size="small" color={theme.mutedForeground} />
+                    {isProcessing && (
+                        <Text style={[styles.metadataText, { color: theme.mutedForeground, marginTop: 4 }]}>
+                            Processing...
+                        </Text>
+                    )}
                 </TouchableOpacity>
             );
         }
 
-        // Error state
-        if (imageError || !imageUrl) {
+        // Error state (but not if processing)
+        if (imageError && !isProcessing) {
             return (
                 <TouchableOpacity
                     style={[containerStyle, { height: minHeight }]}
@@ -162,7 +174,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
                         activeOpacity={0.8}
                     >
                         <Image
-                            source={{ uri: imageUrl }}
+                            source={imageUrl ? { uri: imageUrl } : undefined}
                             style={styles.imageGridPreview}
                             resizeMode="cover"
                             onError={(error) => {
@@ -177,12 +189,19 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
             // Inline mode: Fixed height with contain
             return (
                 <TouchableOpacity
-                    style={[containerStyle, styles.imageInlineContainer]}
+                    style={[
+                        styles.container,
+                        {
+                            backgroundColor: theme.sidebar,
+                            borderColor: theme.border,
+                        },
+                        styles.imageInlineContainer
+                    ]}
                     onPress={handlePress}
                     activeOpacity={0.8}
                 >
                     <Image
-                        source={{ uri: imageUrl }}
+                        source={imageUrl ? { uri: imageUrl } : undefined}
                         style={styles.imageInlinePreview}
                         resizeMode="contain"
                         onError={(error) => {
@@ -253,8 +272,8 @@ const styles = StyleSheet.create({
     },
     inlineContainer: {
         height: 54,
-        minWidth: 54,
-        maxWidth: 54,
+        minWidth: 170,
+        maxWidth: 300,
         paddingRight: 12,
     },
     gridContainer: {
@@ -262,9 +281,12 @@ const styles = StyleSheet.create({
     },
     imageInlineContainer: {
         height: 54,
-        minWidth: 170,
-        maxWidth: 300,
+        width: 54,
+        minWidth: 54,
+        maxWidth: 54,
         padding: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     iconContainer: {
         width: 54,
@@ -293,7 +315,7 @@ const styles = StyleSheet.create({
         marginRight: 4,
     },
     imageInlinePreview: {
-        width: '100%',
+        width: 54,
         height: 54,
     },
     imageGridPreview: {

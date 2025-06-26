@@ -1,15 +1,17 @@
 import { SERVER_URL } from '@/constants/Server';
-import { supabase } from '@/constants/SupabaseConfig';
+import { createSupabaseClient } from '@/constants/SupabaseConfig';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 interface ImageContentResult {
     data: string | null;
     isLoading: boolean;
     error: Error | null;
+    isProcessing: boolean; // New state for server processing
 }
 
-// Cache for loaded image URLs
-const imageCache = new Map<string, string>();
+// Optimistic cache for uploaded files
+const uploadCache = new Map<string, Blob>();
 
 // Convert blob to base64 data URL for React Native
 const blobToDataURL = (blob: Blob): Promise<string> => {
@@ -21,95 +23,120 @@ const blobToDataURL = (blob: Blob): Promise<string> => {
     });
 };
 
-export function useImageContent(sandboxId?: string, filePath?: string): ImageContentResult {
+export function useImageContent(
+    sandboxId?: string,
+    filePath?: string,
+    uploadedBlob?: Blob // For optimistic caching
+): ImageContentResult {
     const [imageUrl, setImageUrl] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<Error | null>(null);
 
+    // Normalize path
+    const normalizedPath = filePath && !filePath.startsWith('/workspace')
+        ? `/workspace/${filePath.startsWith('/') ? filePath.substring(1) : filePath}`
+        : filePath;
+
+    const cacheKey = `${sandboxId}:${normalizedPath}`;
+
+    // Optimistic caching for uploads
     useEffect(() => {
-        if (!sandboxId || !filePath) {
-            setImageUrl(null);
-            setError(null);
-            setIsLoading(false);
-            return;
+        if (uploadedBlob && cacheKey) {
+            uploadCache.set(cacheKey, uploadedBlob);
+            // Auto-expire after 30 seconds
+            setTimeout(() => uploadCache.delete(cacheKey), 30000);
         }
+    }, [uploadedBlob, cacheKey]);
 
-        // Normalize path to have /workspace prefix
-        let normalizedPath = filePath;
-        if (!normalizedPath.startsWith('/workspace')) {
-            normalizedPath = `/workspace/${normalizedPath.startsWith('/') ? normalizedPath.substring(1) : normalizedPath}`;
-        }
-
-        // Check cache first
-        const cacheKey = `${sandboxId}:${normalizedPath}`;
-        const cached = imageCache.get(cacheKey);
-        if (cached) {
-            setImageUrl(cached);
-            setIsLoading(false);
-            setError(null);
-            return;
-        }
-
-        // Load image with authentication
-        const loadImage = async () => {
-            setIsLoading(true);
-            setError(null);
-
-            try {
-                // Get session for auth token
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-                if (sessionError) {
-                    throw new Error(`Authentication error: ${sessionError.message}`);
-                }
-
-                // Construct API URL
-                const url = new URL(`${SERVER_URL}/sandboxes/${sandboxId}/files/content`);
-                url.searchParams.append('path', normalizedPath);
-
-                // Prepare headers with auth
-                const headers: Record<string, string> = {};
-                if (session?.access_token) {
-                    headers['Authorization'] = `Bearer ${session.access_token}`;
-                }
-
-                console.log('[useImageContent] Fetching image:', url.toString());
-
-                // Fetch the image
-                const response = await fetch(url.toString(), { headers });
-
-                if (!response.ok) {
-                    throw new Error(`Failed to load image: ${response.status} ${response.statusText}`);
-                }
-
-                // Convert to blob then to base64 data URL for React Native
-                const blob = await response.blob();
-                const dataUrl = await blobToDataURL(blob);
-
-                // Cache the result
-                imageCache.set(cacheKey, dataUrl);
-
-                setImageUrl(dataUrl);
-                setIsLoading(false);
-
-            } catch (err) {
-                console.error('[useImageContent] Error loading image:', err);
-                setError(err instanceof Error ? err : new Error('Failed to load image'));
-                setIsLoading(false);
+    // Smart fetch with retry logic
+    const {
+        data: blobData,
+        isLoading,
+        error,
+    } = useQuery({
+        queryKey: ['image', sandboxId, normalizedPath],
+        queryFn: async () => {
+            // Check optimistic cache first
+            const cachedBlob = uploadCache.get(cacheKey);
+            if (cachedBlob) {
+                console.log(`[IMAGE] Using optimistic cache for ${filePath}`);
+                return cachedBlob;
             }
-        };
 
-        loadImage();
+            // Fetch from server
+            const supabase = createSupabaseClient();
+            const { data: { session } } = await supabase.auth.getSession();
 
-        // Cleanup function
-        return () => {
-            // No cleanup needed for data URLs
-        };
-    }, [sandboxId, filePath]);
+            if (!session?.access_token) {
+                throw new Error('No auth token');
+            }
+
+            const url = new URL(`${SERVER_URL}/sandboxes/${sandboxId}/files/content`);
+            url.searchParams.append('path', normalizedPath!);
+
+            const response = await fetch(url.toString(), {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to load image: ${response.status}`);
+            }
+
+            return await response.blob();
+        },
+        enabled: Boolean(sandboxId && normalizedPath),
+        staleTime: 5 * 60 * 1000, // 5 minutes
+        retry: (failureCount, error: any) => {
+            // Smart retry for 404s (server processing)
+            if (error?.message?.includes('404')) {
+                return failureCount < 3;
+            }
+            // Don't retry auth errors
+            if (error?.message?.includes('401') || error?.message?.includes('403')) {
+                return false;
+            }
+            return failureCount < 2;
+        },
+        retryDelay: (attemptIndex) => {
+            // Exponential backoff: 1s, 2s, 4s
+            return Math.min(1000 * (2 ** attemptIndex), 4000);
+        },
+    });
+
+    // Convert blob to data URL
+    useEffect(() => {
+        if (blobData instanceof Blob) {
+            blobToDataURL(blobData)
+                .then(setImageUrl)
+                .catch(console.error);
+        } else {
+            setImageUrl(null);
+        }
+    }, [blobData]);
+
+    const isProcessing = error?.message?.includes('404') && isLoading;
 
     return {
         data: imageUrl,
         isLoading,
-        error
+        error,
+        isProcessing,
     };
+}
+
+// Utility for optimistic caching of uploaded files
+export function cacheUploadedFile(sandboxId: string, filePath: string, blob: Blob) {
+    const normalizedPath = !filePath.startsWith('/workspace')
+        ? `/workspace/${filePath.startsWith('/') ? filePath.substring(1) : filePath}`
+        : filePath;
+    const cacheKey = `${sandboxId}:${normalizedPath}`;
+
+    uploadCache.set(cacheKey, blob);
+    console.log(`[IMAGE] Cached uploaded file: ${filePath}`);
+
+    // Auto-expire after 30 seconds
+    setTimeout(() => {
+        uploadCache.delete(cacheKey);
+        console.log(`[IMAGE] Expired cache for: ${filePath}`);
+    }, 30000);
 } 
