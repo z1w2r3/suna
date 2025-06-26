@@ -682,6 +682,8 @@ export const useNewChatSession = () => {
 
     const sendMessage = useCallback(async (content: string, files?: any[]) => {
         try {
+            console.log('[useNewChatSession] sendMessage called with files:', files?.length || 0);
+
             if (!isInitialized) {
                 // IMMEDIATELY set temp project BEFORE any async operations
                 console.log('[useNewChatSession] Setting temp project IMMEDIATELY');
@@ -703,7 +705,9 @@ export const useNewChatSession = () => {
                 type: 'user',
                 is_llm_message: false,
                 content: content,
-                metadata: {},
+                metadata: {
+                    cached_files: files || [] // Store cached files in metadata
+                },
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             };
@@ -714,7 +718,7 @@ export const useNewChatSession = () => {
 
             if (!threadId) {
                 // First message - initiate new chat
-                console.log('[useNewChatSession] Initiating API call for new chat');
+                console.log('[useNewChatSession] Initiating API call for new chat with files:', files?.length || 0);
 
                 const result = await initiateAgent(content, {
                     stream: true,
@@ -722,6 +726,7 @@ export const useNewChatSession = () => {
                     files: files // Pass files to initiateAgent
                 });
 
+                console.log('[useNewChatSession] API call successful, thread_id:', result.thread_id);
                 setThreadId(result.thread_id);
                 setIsSending(false);
 

@@ -43,7 +43,7 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, s
 
     // Apply file parsing to the already-cleaned content from parseMessage
     const { attachments, cleanContent: fileCleanContent } = useMemo(() =>
-        parseFileAttachments(parsedMessage.cleanContent), [parsedMessage.cleanContent]);
+        parseFileAttachments(parsedMessage.cleanContent, message.metadata?.cached_files), [parsedMessage.cleanContent, message.metadata?.cached_files]);
 
     const displayContent = useMemo(() => {
         if (isStreaming && streamProcessed) {
@@ -530,8 +530,8 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     },
     thinkingContainer: {
-        paddingTop: 0,
-        paddingBottom: 24,
+        paddingTop: 16,
+        paddingBottom: 12,
         paddingHorizontal: 0,
         alignItems: 'flex-start',
     },

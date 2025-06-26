@@ -103,6 +103,7 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
                                     isUploading={isUploadedFile ? attachment.isUploading : false}
                                     uploadError={isUploadedFile ? attachment.uploadError : undefined}
                                     uploadedBlob={isUploadedFile ? attachment.cachedBlob : undefined}
+                                    localUri={isUploadedFile ? attachment.localUri : undefined}
                                 />
                                 {onRemove && (
                                     <TouchableOpacity
@@ -141,6 +142,7 @@ export const AttachmentGroup: React.FC<AttachmentGroupProps> = ({
                             isUploading={isUploadedFile ? attachment.isUploading : false}
                             uploadError={isUploadedFile ? attachment.uploadError : undefined}
                             uploadedBlob={isUploadedFile ? attachment.cachedBlob : undefined}
+                            localUri={isUploadedFile ? attachment.localUri : undefined}
                         />
                     </View>
                 );

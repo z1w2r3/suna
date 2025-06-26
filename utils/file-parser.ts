@@ -34,27 +34,38 @@ export function getFileUrl(sandboxId: string | undefined, path: string): string 
 }
 
 /**
- * Parse file attachments from already-cleaned message content using the pattern: [Uploaded File: /path]
- * This should be applied AFTER the main message parsing has extracted clean content
+ * Parse file attachments from message content and return clean content + attachments
+ * Now supports using cached files from message metadata
  */
-export function parseFileAttachments(cleanContent: string): ParsedFileContent {
-  if (!cleanContent || typeof cleanContent !== 'string') {
-    return { attachments: [], cleanContent: cleanContent || '' };
+export function parseFileAttachments(
+  content: string, 
+  cachedFiles?: any[]
+): { attachments: (string | any)[], cleanContent: string } {
+  const fileRegex = /\[Uploaded File: ([^\]]+)\]/g;
+  const matches = [];
+  let match;
+  
+  while ((match = fileRegex.exec(content)) !== null) {
+    matches.push(match[1]);
   }
-
-  // Extract file attachments using regex
-  const attachmentsMatch = cleanContent.match(/\[Uploaded File: (.*?)\]/g);
-  const attachments = attachmentsMatch
-    ? attachmentsMatch.map(match => {
-        const pathMatch = match.match(/\[Uploaded File: (.*?)\]/);
-        return pathMatch ? pathMatch[1] : null;
-      }).filter(Boolean) as string[]
-    : [];
-
-  // Clean message content by removing file references
-  const finalCleanContent = cleanContent.replace(/\[Uploaded File: .*?\]/g, '').trim();
-
-  return { attachments, cleanContent: finalCleanContent };
+  
+  // Remove file references from content
+  const cleanContent = content.replace(fileRegex, '').trim();
+  
+  // If we have cached files, use them instead of just file paths
+  if (cachedFiles && cachedFiles.length > 0) {
+    console.log('[parseFileAttachments] Using cached files:', cachedFiles.length);
+    return {
+      attachments: cachedFiles, // Return UploadedFile objects with localUri/cachedBlob
+      cleanContent
+    };
+  }
+  
+  // Fallback to file paths for server loading
+  return {
+    attachments: matches,
+    cleanContent
+  };
 }
 
 /**

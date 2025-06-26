@@ -16,7 +16,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ChatInputProps {
-    onSendMessage: (message: string) => void;
+    onSendMessage: (message: string, files?: UploadedFile[]) => void;
     onAttachPress?: () => void;
     onMicPress?: () => void;
     onCancelStream?: () => void;
@@ -78,16 +78,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         if (message.trim() || attachedFiles.length > 0) {
             let finalMessage = message.trim();
 
-            // Add file attachments to message
-            if (attachedFiles.length > 0) {
+            // For existing projects with sandboxId, add file references to message
+            // For new chat mode, let server handle file references to avoid duplicates
+            if (attachedFiles.length > 0 && sandboxId) {
                 const fileInfo = attachedFiles
                     .map(file => `[Uploaded File: ${file.path}]`)
                     .join('\n');
                 finalMessage = finalMessage ? `${finalMessage}\n\n${fileInfo}` : fileInfo;
             }
 
-            // Pass the message to the handler
-            onSendMessage(finalMessage);
+            // Pass the message and files separately to the handler
+            onSendMessage(finalMessage, attachedFiles);
             setMessage('');
             setAttachedFiles([]);
         }

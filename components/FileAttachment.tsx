@@ -14,6 +14,7 @@ interface FileAttachmentProps {
     isUploading?: boolean;
     uploadError?: string;
     uploadedBlob?: Blob; // For optimistic caching
+    localUri?: string; // For React Native local file URIs
 }
 
 const getFileIcon = (type: FileType) => {
@@ -55,7 +56,8 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
     layout = 'inline',
     isUploading = false,
     uploadError,
-    uploadedBlob
+    uploadedBlob,
+    localUri
 }) => {
     const theme = useTheme();
     const filename = filepath.split('/').pop() || 'file';
@@ -82,6 +84,9 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
         uploadedBlob
     );
 
+    // For local files without sandboxId, use localUri directly
+    const localImageUri = !sandboxId && isImage && localUri ? localUri : null;
+
     const handlePress = () => {
         onPress?.(filepath);
     };
@@ -101,7 +106,61 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
         const maxHeight = isGrid ? 200 : 54;
         const minHeight = isGrid ? 120 : 54;
 
-        // Loading state
+        // For local files (no sandboxId), use blob URL directly
+        if (!sandboxId && localImageUri) {
+            if (isGrid) {
+                return (
+                    <View
+                        style={{
+                            backgroundColor: theme.sidebar,
+                            borderColor: theme.border,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            overflow: 'hidden',
+                            width: '100%',
+                            aspectRatio: 1.5,
+                            maxHeight: 250,
+                            minHeight: 150,
+                        }}
+                    >
+                        <TouchableOpacity
+                            style={styles.imageGridTouchable}
+                            onPress={handlePress}
+                            activeOpacity={0.8}
+                        >
+                            <Image
+                                source={{ uri: localImageUri }}
+                                style={styles.imageGridPreview}
+                                resizeMode="cover"
+                            />
+                        </TouchableOpacity>
+                    </View>
+                );
+            } else {
+                return (
+                    <TouchableOpacity
+                        style={[
+                            styles.container,
+                            {
+                                backgroundColor: theme.sidebar,
+                                borderColor: theme.border,
+                            },
+                            styles.imageInlineContainer
+                        ]}
+                        onPress={handlePress}
+                        activeOpacity={0.8}
+                    >
+                        <Image
+                            source={{ uri: localImageUri }}
+                            style={styles.imageInlinePreview}
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
+                );
+            }
+        }
+
+        // Loading state (only for server images)
         if (imageLoading && sandboxId) {
             return (
                 <TouchableOpacity
@@ -278,6 +337,7 @@ const styles = StyleSheet.create({
     },
     gridContainer: {
         width: '100%',
+        minWidth: 170,
     },
     imageInlineContainer: {
         height: 54,

@@ -2,6 +2,7 @@ import { commonStyles } from '@/constants/CommonStyles';
 import { useChatSession, useNewChatSession } from '@/hooks/useChatHooks';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import { useIsNewChatMode, useSelectedProject } from '@/stores/ui-store';
+import { UploadedFile } from '@/utils/file-upload';
 import React, { useEffect, useState } from 'react';
 import { Keyboard, KeyboardEvent, Platform, View } from 'react-native';
 import { ChatInput } from './ChatInput';
@@ -141,10 +142,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                 />
             </View>
             <ChatInput
-                onSendMessage={(content: string) => {
-                    // For new chat mode, we can pass files in the first message
-                    // Files are already handled within ChatInput for uploads
-                    sendMessage(content);
+                onSendMessage={(content: string, files?: UploadedFile[]) => {
+                    console.log('[ChatContainer] Sending message with files:', files?.length || 0);
+
+                    if (isNewChatMode) {
+                        // For new chat mode, pass files to the sendMessage function
+                        (newChatSession.sendMessage as any)(content, files);
+                    } else {
+                        // For existing chat mode, files are already uploaded to sandbox
+                        sendMessage(content);
+                    }
                 }}
                 onCancelStream={stopAgent}
                 placeholder={

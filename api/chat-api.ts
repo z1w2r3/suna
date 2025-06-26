@@ -993,6 +993,19 @@ export const initiateAgent = async (
   }
 ): Promise<{ thread_id: string; agent_run_id: string }> => {
   console.log('[API] initiateAgent called with message:', message.substring(0, 50) + '...');
+  console.log('[API] initiateAgent files:', options?.files?.length || 0);
+  
+  if (options?.files?.length) {
+    console.log('[API] File details:');
+    options.files.forEach((file, index) => {
+      console.log(`[API] File ${index}:`, {
+        name: file.name,
+        localUri: file.localUri,
+        type: file.type,
+        size: file.size
+      });
+    });
+  }
 
   const supabase = createSupabaseClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -1013,17 +1026,22 @@ export const initiateAgent = async (
 
   // Add files to FormData if provided
   if (options?.files?.length) {
-    options.files.forEach((file) => {
+    console.log('[API] Adding files to FormData...');
+    options.files.forEach((file, index) => {
       const normalizedName = file.name || file.fileName || 'unknown_file';
+      console.log(`[API] Adding file ${index} to FormData:`, normalizedName);
+      
       formData.append('files', {
         uri: file.localUri || file.uri,
         name: normalizedName,
         type: file.type || file.mimeType || 'application/octet-stream',
       } as any, normalizedName);
     });
+    console.log('[API] All files added to FormData');
   }
 
   try {
+    console.log('[API] Sending request to /agent/initiate...');
     const response = await fetch(`${SERVER_URL}/agent/initiate`, {
       method: 'POST',
       headers: {
@@ -1032,8 +1050,13 @@ export const initiateAgent = async (
       body: formData,
     });
 
+    console.log('[API] Response status:', response.status);
+    console.log('[API] Response headers:', JSON.stringify(Object.fromEntries(response.headers.entries())));
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      console.error('[API] Error response body:', errorText);
+      throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
     }
 
     const result = await response.json();
