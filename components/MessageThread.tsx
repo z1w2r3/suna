@@ -7,7 +7,7 @@ import { parseFileAttachments } from '@/utils/file-parser';
 import { Markdown } from '@/utils/markdown-renderer';
 import { parseMessage, processStreamContent } from '@/utils/message-parser';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Keyboard, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { FlatList, Keyboard, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -26,12 +26,11 @@ interface MessageItemProps {
     sandboxId?: string;
     isStreaming?: boolean;
     streamContent?: string;
-    isHidden?: boolean;
     onLongPress?: (messageText: string, layout: { x: number; y: number; width: number; height: number }, messageId: string) => void;
     onToolPress?: (toolCall: any, messageId: string) => void;
 }
 
-const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, streamContent, isHidden, onLongPress, onToolPress }) => {
+const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, streamContent, onLongPress, onToolPress }) => {
     const theme = useTheme();
     const messageRef = useRef<View>(null);
 
@@ -69,16 +68,16 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, s
 
     const isUser = message.type === 'user';
 
-    // Debug logging for message type
-    if (attachments.length > 0) {
-        console.log(`[MessageThread] Message ${message.message_id}: type="${message.type}", isUser=${isUser}, attachments=${attachments.length}`);
-    }
+    // Debug logging for message type (DISABLED to reduce noise)
+    // if (attachments.length > 0) {
+    //     console.log(`[MessageThread] Message ${message.message_id}: type="${message.type}", isUser=${isUser}, attachments=${attachments.length}`);
+    // }
 
     if (isUser) {
         const bubbleColor = theme.messageBubble;
 
         return (
-            <View style={[styles.messageContainer, { alignSelf: 'flex-end' }, isHidden && { opacity: 0 }]}>
+            <View style={[styles.messageContainer, { alignSelf: 'flex-end' }]}>
                 <TouchableOpacity
                     ref={messageRef}
                     onLongPress={handleLongPress}
@@ -234,42 +233,39 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     }, [openToolView]);
 
     const displayMessages = useMemo(() => {
-        // If not generating or no stream content, just show regular messages
-        if (!showGenerating || !streamContent) {
-            return messages.slice().reverse(); // Reverse for inverted list
+        // SIMPLIFIED LOGIC: Always start with real API messages
+        let result = [...messages];
+
+        // Add streaming message ONLY when actively generating AND we have content
+        if (showGenerating && streamContent && streamContent.length > 0) {
+            const streamingMessage: Message = {
+                message_id: 'streaming-temp',
+                thread_id: messages[0]?.thread_id || '',
+                type: 'assistant',
+                is_llm_message: true,
+                content: streamContent,
+                metadata: {},
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            };
+            result = [...result, streamingMessage];
         }
 
-        const lastMessage = messages[messages.length - 1];
-        const isLastMessageFromAI = lastMessage && lastMessage.type === 'assistant';
+        const finalResult = result.slice().reverse(); // Reverse for inverted list
 
-        // Check if the last message contains similar content to the stream
-        // This prevents duplicates when Supabase refetches the completed message
-        if (isLastMessageFromAI && streamContent) {
-            const lastMessageContent = typeof lastMessage.content === 'string'
-                ? lastMessage.content
-                : JSON.stringify(lastMessage.content);
-
-            // If the last message contains most of the streamed content, don't show streaming message
-            const streamWords = streamContent.trim().split(/\s+/).slice(0, 10).join(' '); // First 10 words
-            if (streamWords.length > 20 && lastMessageContent.includes(streamWords)) {
-                console.log('[MessageThread] Detected duplicate - using Supabase message instead of streaming');
-                return messages.slice().reverse(); // Use the real message from Supabase, reversed
-            }
+        // Debug message order
+        if (finalResult.length > 0) {
+            const orderDebug = finalResult.map((m, i) => `${i}:${m.type}:${m.message_id.substring(0, 8)}`).join(' | ');
+            console.log(`[MessageThread] ORDER (${finalResult.length}): ${orderDebug}`);
         }
 
-        // If there's stream content, show it as a streaming message
-        const streamingMessage: Message = {
-            message_id: 'streaming-temp',
-            thread_id: messages[0]?.thread_id || '',
-            type: 'assistant',
-            is_llm_message: true,
-            content: streamContent, // Use raw stream content
-            metadata: {},
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-        };
+        if (streamContent) {
+            console.log(`[MessageThread] WITH STREAM (${showGenerating ? 'streaming' : 'completed'}) - ${finalResult.length} messages (generating: ${showGenerating})`);
+        } else if (finalResult.length > 0) {
+            console.log(`[MessageThread] NO STREAM - ${finalResult.length} messages`);
+        }
 
-        return [...messages, streamingMessage].slice().reverse(); // Reverse for inverted list
+        return finalResult;
     }, [messages, streamContent, showGenerating]);
 
     // Simplified - no more complex scroll logic needed for initial load
@@ -346,6 +342,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         const isLastMessage = index === displayMessages.length - 1;
         const isStreamingMessage = item.message_id === 'streaming-temp';
 
+        // Debug render order
+        console.log(`[RENDER] Index ${index}: ${item.type} ${item.message_id.substring(0, 8)}`);
+
         // Parse the message to check if it's a tool result
         const parsed = parseMessage(item);
 
@@ -360,7 +359,6 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                 sandboxId={sandboxId}
                 isStreaming={isStreamingMessage && showGenerating}
                 streamContent={isStreamingMessage ? streamContent : undefined}
-                isHidden={item.message_id === selectedMessageId}
                 onLongPress={handleLongPress}
                 onToolPress={handleToolPress}
             />
@@ -376,7 +374,10 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             return (
                 <View style={styles.errorContainer}>
                     <Body style={[styles.errorText, { color: theme.destructive }]}>
-                        Error: {streamError}
+                        {streamError.includes('No response received')
+                            ? 'Agent completed but no response was generated. Please try again.'
+                            : `Error: ${streamError}`
+                        }
                     </Body>
                 </View>
             );
@@ -416,16 +417,18 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
     if (messages.length === 0 && !showGenerating) {
         return (
-            <View style={[styles.container, { backgroundColor: theme.background }]}>
-                <View style={styles.emptyContainer}>
-                    <Body style={[styles.emptyText, { color: theme.mutedForeground }]}>
-                        This is the beginning of your conversation.
-                    </Body>
-                    <Body style={[styles.emptyText, { color: theme.mutedForeground, fontSize: 14, marginTop: 8, opacity: 0.7 }]}>
-                        Send a message to get started!
-                    </Body>
+            <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
+                <View style={[styles.container, { backgroundColor: theme.background }]}>
+                    <View style={styles.emptyContainer}>
+                        <Body style={[styles.emptyText, { color: theme.mutedForeground }]}>
+                            This is the beginning of your conversation.
+                        </Body>
+                        <Body style={[styles.emptyText, { color: theme.mutedForeground, fontSize: 14, marginTop: 8, opacity: 0.7 }]}>
+                            Send a message to get started!
+                        </Body>
+                    </View>
                 </View>
-            </View>
+            </TouchableWithoutFeedback>
         );
     }
 

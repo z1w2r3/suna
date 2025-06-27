@@ -64,6 +64,7 @@ interface UIState {
   // Chat/Project state
   selectedProject: Project | null;
   isNewChatMode: boolean;
+  newChatSessionKey: number;
   
   // File management (local device paths + download progress)
   fileDownloads: Map<string, FileDownload>;
@@ -92,6 +93,7 @@ interface UIState {
   setNewChatMode: (enabled: boolean) => void;
   updateNewChatProject: (projectData: Partial<Project>) => void;
   clearSelection: () => void;
+  resetNewChatSession: () => void;
   
   addFileDownload: (download: FileDownload) => void;
   updateFileDownload: (id: string, updates: Partial<FileDownload>) => void;
@@ -142,6 +144,7 @@ export const useUIStore = create<UIState>()(
     isTyping: false,
     selectedProject: null,
     isNewChatMode: true,
+    newChatSessionKey: 0,
     fileDownloads: new Map(),
     sidebarCollapsed: false,
     activePanel: null,
@@ -185,6 +188,7 @@ export const useUIStore = create<UIState>()(
        return { selectedProject: updatedProject };
      }),
     clearSelection: () => set({ selectedProject: null }),
+    resetNewChatSession: () => set((state) => ({ newChatSessionKey: state.newChatSessionKey + 1 })),
     
     addFileDownload: (download) => set((state) => {
       const newDownloads = new Map(state.fileDownloads);
@@ -455,5 +459,7 @@ export const useSetSelectedProject = () => useUIStore((state) => state.setSelect
 export const useSetNewChatMode = () => useUIStore((state) => state.setNewChatMode);
 export const useUpdateNewChatProject = () => useUIStore((state) => state.updateNewChatProject);
 export const useClearSelection = () => useUIStore((state) => state.clearSelection);
+export const useResetNewChatSession = () => useUIStore((state) => state.resetNewChatSession);
+export const useNewChatSessionKey = () => useUIStore((state) => state.newChatSessionKey);
 
 // All selectors above are atomic and safe from infinite loops 

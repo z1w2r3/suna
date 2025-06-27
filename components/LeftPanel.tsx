@@ -3,7 +3,7 @@ import { fontWeights } from '@/constants/Fonts';
 import { usePanelTopOffset } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
 import { useThemedStyles } from '@/hooks/useThemeColor';
-import { useIsNewChatMode, useSelectedProject, useSetNewChatMode, useSetSelectedProject } from '@/stores/ui-store';
+import { useIsNewChatMode, useResetNewChatSession, useSelectedProject, useSetNewChatMode, useSetSelectedProject } from '@/stores/ui-store';
 import { SquarePen } from 'lucide-react-native';
 import React from 'react';
 import { ScrollView, TouchableOpacity, View } from 'react-native';
@@ -31,6 +31,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     const setSelectedProject = useSetSelectedProject();
     const isNewChatMode = useIsNewChatMode();
     const setNewChatMode = useSetNewChatMode();
+    const resetNewChatSession = useResetNewChatSession();
 
     const styles = useThemedStyles((theme) => ({
         panel: {
@@ -323,6 +324,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                 <TouchableOpacity
                     onPress={() => {
                         console.log('[LeftPanel] Starting new chat from pen button');
+                        resetNewChatSession(); // Reset the new chat session first
                         setSelectedProject(null); // Clear selected project
                         setNewChatMode(true);
                         onClose();

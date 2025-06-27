@@ -547,7 +547,7 @@ export const startAgent = async (
     console.log(`[API] Starting agent for thread ${threadId}`);
 
     const defaultOptions = {
-      model_name: 'claude-3-7-sonnet-latest',
+      model_name: 'claude-sonnet-4',
       enable_thinking: false,
       reasoning_effort: 'low',
       stream: true,

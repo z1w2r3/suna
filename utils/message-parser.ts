@@ -23,47 +23,22 @@ export interface StreamProcessingResult {
 }
 
 export function parseMessage(message: Message): ParsedMessage {
-  console.log('[PARSER DEBUG] Processing message:', {
-    id: message.message_id,
-    type: message.type,
-    is_llm_message: message.is_llm_message,
-    content_type: typeof message.content,
-    content_preview: typeof message.content === 'string' 
-      ? message.content.substring(0, 100) + '...'
-      : JSON.stringify(message.content).substring(0, 100) + '...',
-    has_metadata: !!message.metadata
-  });
 
   const metadata = parseMessageMetadata(message);
   const parsedContent = parseMessageContent(message);
-  
-  console.log('[PARSER DEBUG] Parsed metadata:', metadata);
-  console.log('[PARSER DEBUG] Parsed content:', parsedContent);
-  
+    
   // Check if this is a tool result message that should not display content
   const isToolResultMessage = isMessageToolResult(message, metadata, parsedContent);
   
-  console.log('[PARSER DEBUG] Is tool result message:', isToolResultMessage);
   
   // For tool result messages, don't extract display content
   const content = isToolResultMessage ? '' : extractContentText(message);
   
-  console.log('[PARSER DEBUG] Extracted content:', {
-    length: content.length,
-    preview: content.substring(0, 100) + '...',
-    isEmpty: content.trim().length === 0
-  });
   
   const toolCalls = parseXmlToolCalls(content);
   const toolResults = parseMessageToolResults(message);
   
   const cleanContent = cleanContentFromTools(content, toolCalls);
-  
-  console.log('[PARSER DEBUG] Final clean content:', {
-    length: cleanContent.length,
-    preview: cleanContent.substring(0, 100) + '...',
-    isEmpty: cleanContent.trim().length === 0
-  });
   
   const result = {
     originalMessage: message,
@@ -77,42 +52,28 @@ export function parseMessage(message: Message): ParsedMessage {
     isToolResultMessage,
   };
   
-  console.log('[PARSER DEBUG] Final result:', {
-    cleanContent_length: result.cleanContent.length,
-    hasTools: result.hasTools,
-    isToolOnly: result.isToolOnly,
-    isToolResultMessage: result.isToolResultMessage,
-    toolCalls_count: result.toolCalls.length,
-    toolResults_count: result.toolResults.length
-  });
-  
   return result;
 }
 
 function isMessageToolResult(message: Message, metadata: ParsedMetadata, parsedContent: ParsedContent): boolean {
-  console.log('[PARSER DEBUG] Checking if tool result message...');
   
   // Check message type FIRST - if it's system/status, it's definitely a tool result
   if (message.type === 'system' || message.type === 'status') {
-    console.log('[PARSER DEBUG] ✓ Message type indicates tool result:', message.type);
     return true;
   }
   
   // Check if message type is "tool" (even if not in TypeScript definition)
   if ((message as any).type === 'tool') {
-    console.log('[PARSER DEBUG] ✓ Message type is tool (raw check)');
     return true;
   }
   
   // Check if message has tool execution metadata
   if (metadata.tool_execution || parsedContent.tool_execution) {
-    console.log('[PARSER DEBUG] ✓ Found tool_execution in metadata/content');
     return true;
   }
   
   // Check if metadata indicates this is a tool result
   if (metadata.assistant_message_id && metadata.parsing_details) {
-    console.log('[PARSER DEBUG] ✓ Found assistant_message_id + parsing_details in metadata');
     return true;
   }
   
@@ -122,23 +83,20 @@ function isMessageToolResult(message: Message, metadata: ParsedMetadata, parsedC
     if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
       try {
         const parsed = JSON.parse(trimmed);
-        console.log('[PARSER DEBUG] Parsed JSON content:', Object.keys(parsed));
         
         // SPECIFIC tool result indicators - NOT just any role field
         if (parsed.tool_execution || parsed.function_name || parsed.xml_tag_name || 
             parsed.tool_name || (parsed.result && parsed.function_name)) {
-          console.log('[PARSER DEBUG] ✓ Found specific tool result fields in JSON');
           return true;
         }
         
         // Don't flag normal user/assistant messages
         if (parsed.role === 'user' || parsed.role === 'assistant') {
-          console.log('[PARSER DEBUG] ✗ Normal user/assistant message, not tool result');
           return false;
         }
         
       } catch (e) {
-        console.log('[PARSER DEBUG] Failed to parse JSON:', String(e));
+        // Silent parsing failure for non-JSON content
       }
     }
   }
@@ -146,38 +104,32 @@ function isMessageToolResult(message: Message, metadata: ParsedMetadata, parsedC
   // Check if message content object has tool result fields  
   if (typeof message.content === 'object' && message.content !== null) {
     const content = message.content as any;
-    console.log('[PARSER DEBUG] Object content keys:', Object.keys(content));
     
     // Check if the content field contains tool_execution JSON
     if (content.content && typeof content.content === 'string') {
       try {
         const innerParsed = JSON.parse(content.content);
-        console.log('[PARSER DEBUG] Inner content parsed keys:', Object.keys(innerParsed));
         if (innerParsed.tool_execution) {
-          console.log('[PARSER DEBUG] ✓ Found tool_execution in nested content');
           return true;
         }
       } catch (e) {
-        console.log('[PARSER DEBUG] Failed to parse inner content:', String(e));
+        // Silent parsing failure for inner content
       }
     }
     
     // SPECIFIC tool result indicators - NOT just any role field
     if (content.tool_execution || content.function_name || content.xml_tag_name || 
         content.tool_name || (content.result && content.function_name)) {
-      console.log('[PARSER DEBUG] ✓ Found specific tool result fields in object');
       return true;
     }
     
     // Don't flag normal user/assistant messages UNLESS they have tool metadata
     if ((content.role === 'user' || content.role === 'assistant') && 
         !metadata.assistant_message_id && !metadata.parsing_details) {
-      console.log('[PARSER DEBUG] ✗ Normal user/assistant message, not tool result');
       return false;
     }
   }
   
-  console.log('[PARSER DEBUG] ✗ Not a tool result message');
   return false;
 }
 
