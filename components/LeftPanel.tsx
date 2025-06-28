@@ -1,13 +1,16 @@
-import { useProjects } from '@/api/project-api';
+import { useDeleteProject, useProjects } from '@/api/project-api';
 import { fontWeights } from '@/constants/Fonts';
 import { usePanelTopOffset } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import { useIsNewChatMode, useResetNewChatSession, useSelectedProject, useSetNewChatMode, useSetSelectedProject } from '@/stores/ui-store';
 import { SquarePen } from 'lucide-react-native';
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { ScrollView, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChatActionModal } from './ChatActionModal';
+import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+import { ShareModal } from './ShareModal';
 import { SkeletonProjects } from './Skeleton';
 import { Body, Caption, H3 } from './Typography';
 
@@ -20,8 +23,20 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     const insets = useSafeAreaInsets();
     const panelTopOffset = usePanelTopOffset();
 
+    // Modal states
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [shareModalVisible, setShareModalVisible] = useState(false);
+    const [actionModalVisible, setActionModalVisible] = useState(false);
+    const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null);
+    const [projectToShare, setProjectToShare] = useState<{ id: string; name: string; isPublic?: boolean } | null>(null);
+    const [selectedChatLayout, setSelectedChatLayout] = useState<{ x: number; y: number; width: number; height: number } | undefined>();
+
+    // Refs for layout measurement
+    const chatItemRefs = useRef<{ [key: string]: View | null }>({});
+
     // Use React Query to fetch projects
     const { data: projects = [], isLoading, error } = useProjects();
+    const deleteProjectMutation = useDeleteProject();
 
     // Use auth context
     const { user, signOut } = useAuth();
@@ -267,11 +282,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
         return allProjects.map((project) => (
             <TouchableOpacity
                 key={project.id}
+                ref={(ref) => { chatItemRefs.current[project.id] = ref; }}
                 style={[
                     styles.taskItem,
                     selectedProject?.id === project.id && styles.selectedTaskItem
                 ]}
                 onPress={() => handleProjectSelect(project)}
+                onLongPress={() => handleProjectLongPress(project)}
+                delayLongPress={500}
             >
                 <Body style={[
                     styles.taskText,
@@ -304,6 +322,83 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
         setSelectedProject(project);
         console.log('[LeftPanel] Calling onClose...');
         onClose(); // Close the panel after selection
+    };
+
+    const handleProjectLongPress = (project: any) => {
+        console.log('[LeftPanel] Long press on project:', project);
+        // Don't allow actions on new chat or temp projects
+        if (project.isNewChat || project.id === 'new-chat-temp') {
+            console.log('[LeftPanel] Ignoring long press on new chat project');
+            return;
+        }
+
+        const chatRef = chatItemRefs.current[project.id];
+        if (chatRef) {
+            chatRef.measure((x, y, width, height, pageX, pageY) => {
+                console.log('[LeftPanel] Setting project for actions:', { id: project.id, name: project.name });
+                setSelectedChatLayout({ x: pageX, y: pageY, width, height });
+                setProjectToDelete({ id: project.id, name: project.name });
+                setProjectToShare({ id: project.id, name: project.name, isPublic: project.is_public });
+                setActionModalVisible(true);
+            });
+        } else {
+            console.error('[LeftPanel] No chat ref found for project:', project.id);
+        }
+    };
+
+    const handleActionModalClose = () => {
+        setActionModalVisible(false);
+        setSelectedChatLayout(undefined);
+        setProjectToDelete(null);
+        setProjectToShare(null);
+    };
+
+    const handleActionModalDelete = () => {
+        console.log('[LeftPanel] Showing delete modal for:', projectToDelete?.name);
+        setActionModalVisible(false);
+        setDeleteModalVisible(true);
+    };
+
+    const handleActionModalShare = () => {
+        console.log('[LeftPanel] Showing share modal for:', projectToShare?.name);
+        setActionModalVisible(false);
+        setShareModalVisible(true);
+    };
+
+    const handleDeleteConfirm = async () => {
+        console.log('[LeftPanel] Delete confirm clicked for:', projectToDelete);
+        if (!projectToDelete) {
+            console.error('[LeftPanel] No project to delete!');
+            return;
+        }
+
+        try {
+            console.log('[LeftPanel] Starting deletion of:', projectToDelete.id);
+            await deleteProjectMutation.mutateAsync(projectToDelete.id);
+            console.log('[LeftPanel] Deletion successful');
+
+            // If we're deleting the currently selected project, clear selection
+            if (selectedProject?.id === projectToDelete.id) {
+                setSelectedProject(null);
+                setNewChatMode(true);
+            }
+
+            setDeleteModalVisible(false);
+            setProjectToDelete(null);
+        } catch (error) {
+            console.error('[LeftPanel] Failed to delete project:', error);
+            // Error is already handled by the mutation
+        }
+    };
+
+    const handleDeleteCancel = () => {
+        setDeleteModalVisible(false);
+        setProjectToDelete(null);
+    };
+
+    const handleShareModalClose = () => {
+        setShareModalVisible(false);
+        setProjectToShare(null);
     };
 
     // Get user display info
@@ -385,6 +480,34 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                     <Caption style={styles.signOutText}>Sign Out</Caption>
                 </TouchableOpacity>
             </View>
+
+            {/* Chat Action Modal */}
+            <ChatActionModal
+                visible={actionModalVisible}
+                chatName={projectToDelete?.name || ''}
+                sourceLayout={selectedChatLayout}
+                onClose={handleActionModalClose}
+                onDelete={handleActionModalDelete}
+                onShare={handleActionModalShare}
+            />
+
+            {/* Share Modal */}
+            <ShareModal
+                visible={shareModalVisible}
+                onClose={handleShareModalClose}
+                projectId={projectToShare?.id || ''}
+                projectName={projectToShare?.name || ''}
+                isPublic={projectToShare?.isPublic || false}
+            />
+
+            {/* Delete Confirmation Modal */}
+            <DeleteConfirmationModal
+                visible={deleteModalVisible}
+                projectName={projectToDelete?.name || ''}
+                isDeleting={deleteProjectMutation.isPending}
+                onClose={handleDeleteCancel}
+                onConfirm={handleDeleteConfirm}
+            />
         </View>
     );
 }; 
