@@ -2,10 +2,10 @@ import { Message } from '@/api/chat-api';
 import { commonStyles } from '@/constants/CommonStyles';
 import { fontWeights } from '@/constants/Fonts';
 import { useTheme } from '@/hooks/useThemeColor';
-import { useCurrentTool, useIsGenerating, useOpenToolView, useSelectedProject, useUpdateToolSnapshots } from '@/stores/ui-store';
+
 import { parseFileAttachments } from '@/utils/file-parser';
 import { Markdown } from '@/utils/markdown-renderer';
-import { parseMessage, processStreamContent } from '@/utils/message-parser';
+import { parseMessage } from '@/utils/message-parser';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Keyboard, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import Animated, {
@@ -24,54 +24,35 @@ import { Body } from './Typography';
 interface MessageItemProps {
     message: Message;
     sandboxId?: string;
-    isStreaming?: boolean;
-    streamContent?: string;
     onLongPress?: (messageText: string, layout: { x: number; y: number; width: number; height: number }, messageId: string) => void;
     onToolPress?: (toolCall: any, messageId: string) => void;
 }
 
-const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, streamContent, onLongPress, onToolPress }) => {
+const MessageItem = memo<MessageItemProps>(({ message, sandboxId, onLongPress, onToolPress }) => {
     const theme = useTheme();
     const messageRef = useRef<View>(null);
 
     const parsedMessage = useMemo(() => parseMessage(message), [message]);
 
-    const streamProcessed = useMemo(() =>
-        isStreaming && streamContent ? processStreamContent(streamContent) : null,
-        [isStreaming, streamContent]);
-
-    // Apply file parsing to the already-cleaned content from parseMessage
-    const { attachments, cleanContent: fileCleanContent } = useMemo(() =>
-        parseFileAttachments(parsedMessage.cleanContent, message.metadata?.cached_files), [parsedMessage.cleanContent, message.metadata?.cached_files]);
-
-    const displayContent = useMemo(() => {
-        if (isStreaming && streamProcessed) {
-            // For streaming, use stream content if available, otherwise use file-cleaned content
-            return streamProcessed.cleanContent || fileCleanContent;
-        }
-        // Use the file-cleaned content (which removes file attachments from already-cleaned content)
-        return fileCleanContent;
-    }, [isStreaming, streamProcessed, fileCleanContent]);
+    // Apply file parsing to the content
+    const { attachments, cleanContent } = useMemo(() =>
+        parseFileAttachments(parsedMessage.cleanContent, message.metadata?.cached_files),
+        [parsedMessage.cleanContent, message.metadata?.cached_files]
+    );
 
     const handleLongPress = () => {
         if (messageRef.current) {
             messageRef.current.measure((x, y, width, height, pageX, pageY) => {
-                onLongPress?.(displayContent, { x: pageX, y: pageY, width, height }, message.message_id);
+                onLongPress?.(cleanContent, { x: pageX, y: pageY, width, height }, message.message_id);
             });
         }
     };
 
     const handleFilePress = (filepath: string) => {
-        // Handle file press - could open file viewer or download
         console.log('File pressed:', filepath);
     };
 
     const isUser = message.type === 'user';
-
-    // Debug logging for message type (DISABLED to reduce noise)
-    // if (attachments.length > 0) {
-    //     console.log(`[MessageThread] Message ${message.message_id}: type="${message.type}", isUser=${isUser}, attachments=${attachments.length}`);
-    // }
 
     if (isUser) {
         const bubbleColor = theme.messageBubble;
@@ -86,10 +67,9 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, s
                 >
                     <Animated.View style={[styles.messageBubble, { backgroundColor: bubbleColor }]}>
                         <Body style={[styles.messageText, { color: theme.userMessage }]}>
-                            {displayContent}
+                            {cleanContent}
                         </Body>
 
-                        {/* Render file attachments for user messages */}
                         {attachments.length > 0 && (
                             <AttachmentGroup
                                 attachments={attachments}
@@ -107,13 +87,12 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, s
     } else {
         return (
             <View style={styles.aiMessageContainer}>
-                {displayContent && (
+                {cleanContent && (
                     <Markdown style={[styles.markdownContent]}>
-                        {displayContent}
+                        {cleanContent}
                     </Markdown>
                 )}
 
-                {/* Render file attachments for AI messages */}
                 {attachments.length > 0 && (
                     <AttachmentGroup
                         attachments={attachments}
@@ -132,14 +111,6 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, isStreaming, s
                         }}
                     />
                 )}
-
-                {isStreaming && (
-                    <View style={styles.streamingIndicator}>
-                        <Body style={[styles.streamingIndicatorText, { color: theme.mutedForeground }]}>
-                            ●
-                        </Body>
-                    </View>
-                )}
             </View>
         );
     }
@@ -150,6 +121,7 @@ MessageItem.displayName = 'MessageItem';
 interface MessageThreadProps {
     messages: Message[];
     isGenerating?: boolean;
+    isSending?: boolean;
     streamContent?: string;
     streamError?: string | null;
     isLoadingMessages?: boolean;
@@ -157,7 +129,7 @@ interface MessageThreadProps {
     keyboardHeight?: number;
 }
 
-// Shimmer component for thinking animation
+// EXACT FRONTEND PATTERN - Simple thinking animation
 const ThinkingText = memo<{ children: string; color: string }>(({ children, color }) => {
     const opacity = useSharedValue(0.3);
 
@@ -190,6 +162,7 @@ ThinkingText.displayName = 'ThinkingText';
 export const MessageThread: React.FC<MessageThreadProps> = ({
     messages,
     isGenerating = false,
+    isSending = false,
     streamContent = '',
     streamError,
     isLoadingMessages = false,
@@ -197,14 +170,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     keyboardHeight = 0,
 }) => {
     const theme = useTheme();
-    const selectedProject = useSelectedProject();
     const flatListRef = useRef<FlatList>(null);
     const [isAtBottom, setIsAtBottom] = useState(true);
-    const currentScrollOffset = useRef(0);
-    const isFirstLoad = useRef(true);
-
-    // Get sandboxId from selected project
-    const sandboxId = selectedProject?.sandbox?.id;
 
     // Modal state
     const [modalVisible, setModalVisible] = useState(false);
@@ -212,96 +179,38 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
     const [sourceLayout, setSourceLayout] = useState<{ x: number; y: number; width: number; height: number } | undefined>();
 
-    const currentTool = useCurrentTool();
-    const isGeneratingFromStore = useIsGenerating();
-    const openToolView = useOpenToolView();
-    const updateToolSnapshots = useUpdateToolSnapshots();
 
-    const showGenerating = isGenerating || isGeneratingFromStore;
-    const prevShowGenerating = useRef(showGenerating);
 
-    // Update tool snapshots whenever messages change
-    useEffect(() => {
-        if (messages.length > 0) {
-            updateToolSnapshots(messages);
-        }
-    }, [messages, updateToolSnapshots]);
-
-    const handleToolPress = useCallback((toolCall: any, messageId: string) => {
-        // Store handles both tool selection and panel opening
-        openToolView(toolCall, messageId);
-    }, [openToolView]);
-
+    // EXACT FRONTEND PATTERN - Simple message display
     const displayMessages = useMemo(() => {
-        // SIMPLIFIED LOGIC: Always start with real API messages
-        let result = [...messages];
+        // Simple reverse for inverted list - no complex logic
+        return messages.slice().reverse();
+    }, [messages]);
 
-        // Add streaming message ONLY when actively generating AND we have content
-        if (showGenerating && streamContent && streamContent.length > 0) {
-            const streamingMessage: Message = {
-                message_id: 'streaming-temp',
-                thread_id: messages[0]?.thread_id || '',
-                type: 'assistant',
-                is_llm_message: true,
-                content: streamContent,
-                metadata: {},
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            };
-            result = [...result, streamingMessage];
-        }
+    // EXACT FRONTEND PATTERN - Show streaming content as text
+    const showStreamingText = isGenerating && streamContent;
 
-        const finalResult = result.slice().reverse(); // Reverse for inverted list
-
-        // Debug message order
-        if (finalResult.length > 0) {
-            const orderDebug = finalResult.map((m, i) => `${i}:${m.type}:${m.message_id.substring(0, 8)}`).join(' | ');
-            console.log(`[MessageThread] ORDER (${finalResult.length}): ${orderDebug}`);
-        }
-
-        if (streamContent) {
-            console.log(`[MessageThread] WITH STREAM (${showGenerating ? 'streaming' : 'completed'}) - ${finalResult.length} messages (generating: ${showGenerating})`);
-        } else if (finalResult.length > 0) {
-            console.log(`[MessageThread] NO STREAM - ${finalResult.length} messages`);
-        }
-
-        return finalResult;
-    }, [messages, streamContent, showGenerating]);
-
-    // Simplified - no more complex scroll logic needed for initial load
+    // Simple auto-scroll on content change
     const handleContentSizeChange = useCallback(() => {
-        // Only scroll during active streaming
-        if (showGenerating && flatListRef.current) {
+        if ((isGenerating || isSending) && flatListRef.current) {
             flatListRef.current.scrollToOffset({ offset: 0, animated: true });
         }
-    }, [showGenerating]);
+    }, [isGenerating, isSending]);
 
-    // Auto-scroll to bottom and dismiss keyboard when streaming starts
+    // Auto-scroll when generating starts
     useEffect(() => {
-        if (showGenerating && !prevShowGenerating.current) {
-            // Dismiss keyboard immediately
+        if (isGenerating || isSending) {
             Keyboard.dismiss();
-
-            // For inverted list, scroll to offset 0 (which is the bottom)
             setTimeout(() => {
                 if (flatListRef.current) {
                     flatListRef.current.scrollToOffset({ offset: 0, animated: true });
                 }
             }, 50);
         }
-        prevShowGenerating.current = showGenerating;
-    }, [showGenerating]);
+    }, [isGenerating, isSending]);
 
-    // Enhanced auto-scroll during streaming - for inverted list
+    // Keyboard handling
     useEffect(() => {
-        if (showGenerating && streamContent && flatListRef.current) {
-            // For inverted list, scroll to offset 0 to stay at bottom
-            flatListRef.current.scrollToOffset({ offset: 0, animated: true });
-        }
-    }, [streamContent, showGenerating]);
-
-    // Simplified keyboard handling - for inverted list
-    React.useEffect(() => {
         if (keyboardHeight > 0 && flatListRef.current) {
             setTimeout(() => {
                 flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
@@ -309,13 +218,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         }
     }, [keyboardHeight]);
 
-    // Remove all the complex initial load logic - not needed with inverted list
-
     const handleScroll = useCallback((event: any) => {
-        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-        currentScrollOffset.current = contentOffset.y;
-
-        // For inverted list, isAtBottom is when contentOffset.y is close to 0
+        const { contentOffset } = event.nativeEvent;
         const isScrolledToBottom = contentOffset.y <= 50;
 
         if (isScrolledToBottom !== isAtBottom) {
@@ -338,17 +242,13 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         setSelectedMessageId(null);
     }, []);
 
-    const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-        const isLastMessage = index === displayMessages.length - 1;
-        const isStreamingMessage = item.message_id === 'streaming-temp';
+    const handleToolPress = useCallback((toolCall: any, messageId: string) => {
+        console.log('Tool pressed:', toolCall, messageId);
+    }, []);
 
-        // Debug render order
-        console.log(`[RENDER] Index ${index}: ${item.type} ${item.message_id.substring(0, 8)}`);
-
-        // Parse the message to check if it's a tool result
-        const parsed = parseMessage(item);
-
+    const renderMessage = ({ item }: { item: Message }) => {
         // Skip rendering pure tool result messages
+        const parsed = parseMessage(item);
         if (parsed.isToolResultMessage && !parsed.cleanContent.trim()) {
             return null;
         }
@@ -356,9 +256,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         return (
             <MessageItem
                 message={item}
-                sandboxId={sandboxId}
-                isStreaming={isStreamingMessage && showGenerating}
-                streamContent={isStreamingMessage ? streamContent : undefined}
+                sandboxId={undefined}
                 onLongPress={handleLongPress}
                 onToolPress={handleToolPress}
             />
@@ -367,8 +265,9 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
     const keyExtractor = (item: Message) => item.message_id;
 
+    // EXACT FRONTEND PATTERN - Simple footer
     const renderFooter = () => {
-        if (!showGenerating) return null;
+        if (!isGenerating && !isSending) return null;
 
         if (streamError) {
             return (
@@ -383,28 +282,28 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
             );
         }
 
-        if (!streamContent) {
+        if (showStreamingText) {
             return (
-                <View style={styles.thinkingContainer}>
-                    <ThinkingText color={theme.placeholderText}>
-                        {currentTool ? `${currentTool.name} is thinking...` : 'Suna is thinking...'}
-                    </ThinkingText>
+                <View style={styles.streamingContainer}>
+                    <Markdown style={[styles.markdownContent]}>
+                        {streamContent}
+                    </Markdown>
+                    <View style={styles.streamingIndicator}>
+                        <Body style={[styles.streamingIndicatorText, { color: theme.mutedForeground }]}>
+                            ●
+                        </Body>
+                    </View>
                 </View>
             );
         }
 
-        // Check if we have a detected tool name from stream
-        const streamProcessed = processStreamContent(streamContent);
-        if (streamProcessed.currentToolName && streamProcessed.isStreamingTool) {
-            return (
-                <View style={styles.thinkingContainer}>
-                    <ThinkingText color={theme.placeholderText}>
-                        {`${streamProcessed.currentToolName} is running...`}
-                    </ThinkingText>
-                </View>
-            );
-        }
-
+        return (
+            <View style={styles.thinkingContainer}>
+                <ThinkingText color={theme.placeholderText}>
+                    Suna is thinking...
+                </ThinkingText>
+            </View>
+        );
     };
 
     if (isLoadingMessages && messages.length === 0) {
@@ -415,7 +314,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         );
     }
 
-    if (messages.length === 0 && !showGenerating) {
+    if (messages.length === 0 && !isGenerating && !isSending) {
         return (
             <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
                 <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -489,25 +388,17 @@ const styles = StyleSheet.create({
         marginVertical: 4,
         width: '100%',
     },
-    aiMessageText: {
-        lineHeight: 20,
+    streamingContainer: {
         paddingVertical: 8,
-        padding: 0,
-        margin: 0,
-        borderWidth: 0,
-        backgroundColor: 'transparent',
-        fontSize: 16,
-        fontFamily: 'System',
+        width: '100%',
     },
     streamingIndicator: {
-        fontSize: 12,
-        marginLeft: 4,
-        opacity: 0.7,
+        paddingTop: 4,
+        alignItems: 'flex-start',
     },
-    generatingContainer: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        ...commonStyles.centerContainer,
+    streamingIndicatorText: {
+        fontSize: 12,
+        opacity: 0.7,
     },
     generatingText: {
         fontStyle: 'italic',
@@ -537,11 +428,6 @@ const styles = StyleSheet.create({
         paddingBottom: 12,
         paddingHorizontal: 0,
         alignItems: 'flex-start',
-    },
-    streamingIndicatorText: {
-        fontSize: 12,
-        marginLeft: 4,
-        opacity: 0.7,
     },
     markdownContent: {
         flex: 1,

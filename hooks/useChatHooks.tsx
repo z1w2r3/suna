@@ -16,7 +16,7 @@ import {
 } from '@/api/chat-api';
 import { projectKeys } from '@/api/project-api';
 import { createSupabaseClient } from '@/constants/SupabaseConfig';
-import { useNewChatSessionKey, useSetCurrentTool, useSetIsGenerating, useUpdateNewChatProject } from '@/stores/ui-store';
+import { useNewChatSessionKey, useSetIsGenerating, useUpdateNewChatProject } from '@/stores/ui-store';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -124,53 +124,105 @@ export const useStopAgent = () => {
     });
 };
 
-// MINIMAL STREAM HOOK
+// EXACT FRONTEND PATTERN - Stream Hook Callbacks
+export interface AgentStreamCallbacks {
+    onMessage: (message: Message) => void;
+    onStatusChange?: (status: string) => void;
+    onError?: (error: string) => void;
+    onClose?: (finalStatus: string) => void;
+}
+
+// EXACT FRONTEND PATTERN - useAgentStream Result
 export interface UseAgentStreamResult {
-    status: 'idle' | 'connecting' | 'streaming' | 'completed' | 'error' | 'stopped';
+    status: string;
     textContent: string;
     toolCall: ParsedContent | null;
     error: string | null;
     agentRunId: string | null;
     startStreaming: (runId: string) => void;
-    stopStreaming: () => void;
-    isStreaming: boolean;
+    stopStreaming: () => Promise<void>;
 }
 
-export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
-    const queryClient = useQueryClient();
-    const setCurrentTool = useSetCurrentTool();
-    const setIsGenerating = useSetIsGenerating();
-
-    const [status, setStatus] = useState<UseAgentStreamResult['status']>('idle');
+// EXACT FRONTEND PATTERN - useAgentStream Hook
+export const useAgentStream = (
+    callbacks: AgentStreamCallbacks,
+    threadId: string,
+    setMessages: (messages: Message[]) => void,
+): UseAgentStreamResult => {
+    const [agentRunId, setAgentRunId] = useState<string | null>(null);
+    const [status, setStatus] = useState<string>('idle');
     const [textContent, setTextContent] = useState<string>('');
     const [toolCall, setToolCall] = useState<ParsedContent | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [agentRunId, setAgentRunId] = useState<string | null>(null);
 
-    const cleanupRef = useRef<(() => void) | null>(null);
-    const isMountedRef = useRef(true);
+    const streamCleanupRef = useRef<(() => void) | null>(null);
+    const isMountedRef = useRef<boolean>(true);
+    const currentRunIdRef = useRef<string | null>(null);
+    const threadIdRef = useRef(threadId);
+    const setMessagesRef = useRef(setMessages);
 
-    const finalizeStream = useCallback((finalStatus: string) => {
+    // Update refs
+    useEffect(() => {
+        threadIdRef.current = threadId;
+    }, [threadId]);
+
+    useEffect(() => {
+        setMessagesRef.current = setMessages;
+    }, [setMessages]);
+
+    // Update status and notify
+    const updateStatus = useCallback((newStatus: string) => {
+        if (isMountedRef.current) {
+            setStatus(newStatus);
+            callbacks.onStatusChange?.(newStatus);
+            if (newStatus === 'error' && error) {
+                callbacks.onError?.(error);
+            }
+            if (['completed', 'stopped', 'failed', 'error', 'agent_not_running'].includes(newStatus)) {
+                callbacks.onClose?.(newStatus);
+            }
+        }
+    }, [callbacks, error]);
+
+    // EXACT FRONTEND PATTERN - Finalize stream
+    const finalizeStream = useCallback((finalStatus: string, runId: string | null = agentRunId) => {
         if (!isMountedRef.current) return;
 
-        if (cleanupRef.current) {
-            cleanupRef.current();
-            cleanupRef.current = null;
+        const currentThreadId = threadIdRef.current;
+        const currentSetMessages = setMessagesRef.current;
+
+        console.log(`[useAgentStream] Finalizing stream for ${runId} on thread ${currentThreadId} with status: ${finalStatus}`);
+
+        if (streamCleanupRef.current) {
+            streamCleanupRef.current();
+            streamCleanupRef.current = null;
         }
 
-        setIsGenerating(false);
-        setCurrentTool(null);
-        setStatus(finalStatus as UseAgentStreamResult['status']);
+        // Reset streaming state
+        setTextContent('');
+        setToolCall(null);
+        updateStatus(finalStatus);
+        setAgentRunId(null);
+        currentRunIdRef.current = null;
 
-        // Refetch API immediately and clear stream content immediately for all cases
-        if (threadId && ['completed', 'stopped', 'error'].includes(finalStatus)) {
-            setToolCall(null);
-            setAgentRunId(null);
-            setTextContent(''); // CLEAR IMMEDIATELY - no delay
-            queryClient.invalidateQueries({ queryKey: chatKeys.messagesForThread(threadId) });
+        // EXACT FRONTEND PATTERN - Refetch messages on finalization
+        const terminalStatuses = ['completed', 'stopped', 'failed', 'error', 'agent_not_running'];
+        if (currentThreadId && terminalStatuses.includes(finalStatus)) {
+            console.log(`[useAgentStream] Refetching messages for thread ${currentThreadId}`);
+            getMessages(currentThreadId)
+                .then((messagesData: Message[]) => {
+                    if (isMountedRef.current && messagesData) {
+                        console.log(`[useAgentStream] Refetched ${messagesData.length} messages`);
+                        currentSetMessages(messagesData);
+                    }
+                })
+                .catch((err) => {
+                    console.error(`[useAgentStream] Error refetching messages:`, err);
+                });
         }
-    }, [queryClient, threadId, setIsGenerating, setCurrentTool]);
+    }, [agentRunId, updateStatus]);
 
+    // EXACT FRONTEND PATTERN - Stream message handler
     const handleStreamMessage = useCallback((rawData: string) => {
         if (!isMountedRef.current) return;
 
@@ -180,80 +232,76 @@ export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
         }
         if (!processedData) return;
 
-        // Check for completion
+        // Check for completion messages
         if (processedData.includes('Run data not available for streaming') ||
             processedData.includes('Stream ended with status: completed') ||
             processedData.includes('"status": "completed"')) {
-            finalizeStream('completed');
+            console.log('[useAgentStream] Detected completion message');
+            finalizeStream('completed', currentRunIdRef.current);
             return;
         }
 
         try {
             const jsonData = JSON.parse(processedData);
-            console.log(`[STREAM] Received message type: ${jsonData.type}, status: ${jsonData.status || 'none'}`);
 
+            // Handle error status
             if (jsonData.status === 'error') {
-                console.log(`[STREAM ERROR] Error message: ${jsonData.message}`);
-                setError(jsonData.message || 'Unknown error occurred');
+                console.error('[useAgentStream] Received error status:', jsonData);
+                const errorMessage = jsonData.message || 'Unknown error occurred';
+                setError(errorMessage);
+                callbacks.onError?.(errorMessage);
                 return;
             }
 
+            // Handle completion status
             if (jsonData.status === 'completed') {
-                // Use a ref or get current value to check if we received content
-                setTextContent(currentContent => {
-                    if (!currentContent || currentContent.length === 0) {
-                        console.log('[STREAM ERROR] Stream completed but no content was received!');
-                        setError('No response received from agent');
-                        finalizeStream('error');
-                    } else {
-                        console.log(`[STREAM] Stream completed successfully with ${currentContent.length} characters`);
-                        finalizeStream('completed');
-                    }
-                    return currentContent; // Don't change the content
-                });
+                console.log('[useAgentStream] Stream completed');
+                finalizeStream('completed', currentRunIdRef.current);
                 return;
             }
 
             const parsedContent = JSON.parse(jsonData.content || '{}');
             const parsedMetadata = JSON.parse(jsonData.metadata || '{}');
 
+            // Update status to streaming
             if (status !== 'streaming') {
-                setStatus('streaming');
-                setIsGenerating(true);
+                updateStatus('streaming');
             }
 
             switch (jsonData.type) {
                 case 'assistant':
                     if (parsedMetadata.stream_status === 'chunk' && parsedContent.content) {
-                        console.log(`[STREAM] Adding chunk: "${parsedContent.content.substring(0, 50)}..."`);
                         setTextContent(prev => prev + parsedContent.content);
+                    } else if (parsedMetadata.stream_status === 'complete') {
+                        setTextContent('');
+                        setToolCall(null);
+                        if (jsonData.message_id) {
+                            callbacks.onMessage(jsonData);
+                        }
                     } else if (!parsedMetadata.stream_status && parsedContent.content) {
-                        console.log(`[STREAM] Adding content: "${parsedContent.content.substring(0, 50)}..."`);
                         setTextContent(prev => prev + parsedContent.content);
-                    } else {
-                        console.log(`[STREAM] Assistant message with no content - metadata: ${JSON.stringify(parsedMetadata)}, content: ${JSON.stringify(parsedContent)}`);
+                    }
+                    break;
+
+                case 'tool':
+                    setToolCall(null);
+                    if (jsonData.message_id) {
+                        callbacks.onMessage(jsonData);
                     }
                     break;
 
                 case 'status':
                     switch (parsedContent.status_type) {
                         case 'tool_started':
-                            const toolInfo = {
-                                type: 'tool_call' as const,
+                            setToolCall({
+                                type: 'tool_call',
                                 content: `Tool: ${parsedContent.function_name || 'Unknown'}`,
-                                role: 'assistant' as const,
+                                role: 'assistant',
                                 status_type: 'tool_started',
                                 name: parsedContent.function_name,
                                 arguments: parsedContent.arguments,
                                 xml_tag_name: parsedContent.xml_tag_name,
                                 tool_index: parsedContent.tool_index,
-                            };
-                            setToolCall(toolInfo);
-                            setCurrentTool({
-                                id: `tool-${parsedContent.tool_index || 'unknown'}`,
-                                name: parsedContent.function_name || 'Unknown Tool',
-                                isActive: true,
-                                data: parsedContent.arguments,
                             });
                             break;
                         case 'tool_completed':
@@ -261,80 +309,100 @@ export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
                         case 'tool_error':
                             if (toolCall?.tool_index === parsedContent.tool_index) {
                                 setToolCall(null);
-                                setCurrentTool(null);
                             }
                             break;
                         case 'thread_run_end':
-                            finalizeStream('completed');
-                            return;
+                            console.log('[useAgentStream] Thread run end');
+                            finalizeStream('completed', currentRunIdRef.current);
+                            break;
                         case 'error':
                             setError(parsedContent.message || 'Agent run failed');
-                            finalizeStream('error');
-                            return;
+                            finalizeStream('error', currentRunIdRef.current);
+                            break;
+                    }
+                    break;
+
+                case 'user':
+                case 'system':
+                    if (jsonData.message_id) {
+                        callbacks.onMessage(jsonData);
                     }
                     break;
             }
         } catch (parseError) {
+            // Fallback parsing
             const parsed = parseStreamContent(processedData);
             if (parsed?.type === 'text') {
                 setTextContent(prev => prev + parsed.content);
             }
         }
-    }, [status, toolCall, finalizeStream, setIsGenerating, setCurrentTool]);
+    }, [status, toolCall, finalizeStream, updateStatus, callbacks]);
 
+    // EXACT FRONTEND PATTERN - Stream error handler
+    const handleStreamError = useCallback((err: Error | string) => {
+        if (!isMountedRef.current) return;
+
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error('[useAgentStream] Stream error:', errorMessage);
+        setError(errorMessage);
+        finalizeStream('error', currentRunIdRef.current);
+    }, [finalizeStream]);
+
+    // EXACT FRONTEND PATTERN - Stream close handler
+    const handleStreamClose = useCallback(() => {
+        if (!isMountedRef.current) return;
+        console.log('[useAgentStream] Stream closed');
+        if (status === 'streaming' || status === 'connecting') {
+            finalizeStream('completed', currentRunIdRef.current);
+        }
+    }, [status, finalizeStream]);
+
+    // EXACT FRONTEND PATTERN - Start streaming
     const startStreaming = useCallback((runId: string) => {
         if (!isMountedRef.current) return;
 
-        if (cleanupRef.current) {
-            cleanupRef.current();
-            cleanupRef.current = null;
+        if (streamCleanupRef.current) {
+            streamCleanupRef.current();
+            streamCleanupRef.current = null;
         }
 
-        setStatus('connecting');
+        console.log(`[useAgentStream] Starting stream for run ${runId}`);
+        setAgentRunId(runId);
+        currentRunIdRef.current = runId;
         setTextContent('');
         setToolCall(null);
         setError(null);
-        setAgentRunId(runId);
-        setIsGenerating(true);
+        updateStatus('connecting');
 
         const cleanup = streamAgent(runId, {
             onMessage: handleStreamMessage,
-            onError: (err) => {
-                if (!isMountedRef.current) return;
-                const errorMessage = err instanceof Error ? err.message : String(err);
-                setError(errorMessage);
-                finalizeStream('error');
-            },
-            onClose: () => {
-                if (!isMountedRef.current) return;
-                if (status === 'streaming' || status === 'connecting') {
-                    finalizeStream('completed');
-                }
-            },
+            onError: handleStreamError,
+            onClose: handleStreamClose,
         });
 
-        cleanupRef.current = cleanup;
-    }, [handleStreamMessage, finalizeStream, setIsGenerating, status]);
+        streamCleanupRef.current = cleanup;
+    }, [handleStreamMessage, handleStreamError, handleStreamClose, updateStatus]);
 
-    const stopStreaming = useCallback(() => {
-        if (cleanupRef.current) {
-            cleanupRef.current();
-            cleanupRef.current = null;
+    // EXACT FRONTEND PATTERN - Stop streaming
+    const stopStreaming = useCallback(async () => {
+        console.log('[useAgentStream] Stopping stream');
+        if (streamCleanupRef.current) {
+            streamCleanupRef.current();
+            streamCleanupRef.current = null;
         }
-        finalizeStream('stopped');
+        finalizeStream('stopped', currentRunIdRef.current);
     }, [finalizeStream]);
 
+    // Cleanup on unmount
     useEffect(() => {
         isMountedRef.current = true;
         return () => {
             isMountedRef.current = false;
-            if (cleanupRef.current) {
-                cleanupRef.current();
+            if (streamCleanupRef.current) {
+                streamCleanupRef.current();
             }
-            setIsGenerating(false);
-            setCurrentTool(null);
         };
-    }, [setIsGenerating, setCurrentTool]);
+    }, []);
 
     return {
         status,
@@ -344,11 +412,10 @@ export const useAgentStream = (threadId?: string): UseAgentStreamResult => {
         agentRunId,
         startStreaming,
         stopStreaming,
-        isStreaming: status === 'streaming' || status === 'connecting',
     };
 };
 
-// WORKING FRONTEND PATTERNS - FROM YOUR CODE
+// EXACT FRONTEND PATTERN - Chat Session Hook
 export const useChatSession = (projectId: string) => {
     const isNewChat = projectId === 'new-chat-temp';
     const sessionKey = useNewChatSessionKey();
@@ -358,19 +425,17 @@ export const useChatSession = (projectId: string) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [isInitialized, setIsInitialized] = useState(false);
     const [isSending, setIsSending] = useState(false);
-    const [processedMessageIds] = useState<Set<string>>(new Set()); // BULLETPROOF DEDUPLICATION
 
-    // Reset on session change (for new chat)
+    // Reset on session change
     useEffect(() => {
         if (isNewChat) {
-            console.log(`[MESSAGE COUNT] Session reset - clearing all messages`);
+            console.log('[useChatSession] Session reset - clearing all messages');
             setThreadId(null);
             setMessages([]);
             setIsInitialized(false);
             setIsSending(false);
-            processedMessageIds.clear(); // Clear processed IDs
         }
-    }, [sessionKey, isNewChat, processedMessageIds]);
+    }, [sessionKey, isNewChat]);
 
     // Hooks
     const queryClient = useQueryClient();
@@ -380,117 +445,57 @@ export const useChatSession = (projectId: string) => {
     const addMessage = useAddMessage();
     const startAgentMutation = useStartAgent();
     const stopAgentMutation = useStopAgent();
-    const agentStream = useAgentStream(threadId || thread?.thread_id);
     const setIsGenerating = useSetIsGenerating();
     const updateNewChatProject = useUpdateNewChatProject();
 
-    // WORKING PATTERN: Handle new messages from stream
+    // EXACT FRONTEND PATTERN - Stream message handler
     const handleNewMessageFromStream = useCallback((message: Message) => {
-        // BULLETPROOF DEDUPLICATION - Never process same message twice
-        if (processedMessageIds.has(message.message_id)) {
-            console.log(`[BULLETPROOF] Skipping already processed message: ${message.message_id}`);
-            return;
-        }
-
-        // Mark as processed immediately
-        processedMessageIds.add(message.message_id);
-        console.log(`[BULLETPROOF] Processing new message: ${message.message_id}`);
+        console.log(`[STREAM HANDLER] Received message: ID=${message.message_id}, Type=${message.type}`);
 
         setMessages((prev) => {
-            if (!prev) prev = [];
-            const prevCount = prev.length;
-
-            // LEVEL 1: OPTIMISTIC USER MESSAGE REPLACEMENT (for temp messages only)
-            if (message.type === 'user') {
-                // Extract actual content value for comparison (not JSON formatting)
-                const extractContentValue = (content: any) => {
-                    if (typeof content === 'string') {
-                        try {
-                            const parsed = JSON.parse(content);
-                            return parsed.content || content; // Extract inner content if it's {"role": "user", "content": "Hi"}
-                        } catch {
-                            return content; // If not JSON, return as-is
-                        }
-                    } else if (content && typeof content === 'object') {
-                        return content.content || JSON.stringify(content);
-                    }
-                    return String(content);
-                };
-
-                const realContentValue = extractContentValue(message.content);
-                console.log(`[CONTENT CHECK] Real message content length: ${realContentValue.length}, preview: "${realContentValue.substring(0, 100)}..."`);
-
-                // Find the MOST RECENT optimistic message with matching content (not the first one!)
-                let optimisticIndex = -1;
-                for (let i = prev.length - 1; i >= 0; i--) {
-                    const m = prev[i];
-                    if (!m.message_id.startsWith('temp-user-') || m.type !== 'user') {
-                        continue;
-                    }
-
-                    const optimisticContentValue = extractContentValue(m.content);
-                    console.log(`[CONTENT CHECK] Checking optimistic at index ${i}, content length: ${optimisticContentValue.length}, preview: "${optimisticContentValue.substring(0, 100)}..."`);
-
-                    const matches = optimisticContentValue === realContentValue;
-                    if (matches) {
-                        console.log(`[CONTENT MATCH] Found matching optimistic message at index ${i}`);
-                        optimisticIndex = i;
-                        break; // Found the most recent match, stop searching
-                    } else {
-                        console.log(`[CONTENT MISMATCH] Optimistic: "${optimisticContentValue}" vs Real: "${realContentValue}"`);
-                    }
-                }
-
-                if (optimisticIndex !== -1) {
-                    console.log(`[BULLETPROOF] ✅ REPLACED optimistic user message at index ${optimisticIndex}`);
-                    const newMessages = [...prev];
-                    newMessages[optimisticIndex] = message;      // REPLACE OPTIMISTIC
-                    console.log(`[MESSAGE COUNT] Replaced optimistic: ${prevCount} → ${newMessages.length}`);
-
-                    // Debug final order after replacement
-                    const orderDebug = newMessages.map((m, i) => `${i}:${m.type}:${m.message_id.substring(0, 8)}`).join(' | ');
-                    console.log(`[MESSAGE ARRAY ORDER AFTER REPLACE]: ${orderDebug}`);
-
-                    return newMessages;
-                }
+            const messageExists = prev.some(m => m.message_id === message.message_id);
+            if (messageExists) {
+                return prev.map(m => m.message_id === message.message_id ? message : m);
+            } else {
+                return [...prev, message];
             }
-
-            // LEVEL 2: ADD NEW MESSAGE (all other cases)
-            const newMessages = [...prev, message];
-            console.log(`[MESSAGE COUNT] Added new message: ${prevCount} → ${newMessages.length} (${message.type}: ${message.message_id})`);
-
-            // Debug final order
-            const orderDebug = newMessages.map((m, i) => `${i}:${m.type}:${m.message_id.substring(0, 8)}`).join(' | ');
-            console.log(`[MESSAGE ARRAY ORDER]: ${orderDebug}`);
-
-            return newMessages;
         });
-    }, [processedMessageIds]);
+    }, []);
 
-    // Sync API messages to local state - WITH DETAILED LOGGING
+    // EXACT FRONTEND PATTERN - Stream status handler
+    const handleStreamStatusChange = useCallback((hookStatus: string) => {
+        console.log(`[useChatSession] Hook status changed: ${hookStatus}`);
+        switch (hookStatus) {
+            case 'idle':
+            case 'completed':
+            case 'stopped':
+            case 'agent_not_running':
+            case 'error':
+            case 'failed':
+                setIsGenerating(false);
+                break;
+            case 'connecting':
+            case 'streaming':
+                setIsGenerating(true);
+                break;
+        }
+    }, [setIsGenerating]);
+
+    // Agent stream hook
+    const agentStream = useAgentStream({
+        onMessage: handleNewMessageFromStream,
+        onStatusChange: handleStreamStatusChange,
+        onError: (error) => console.error('[useChatSession] Stream error:', error),
+        onClose: (finalStatus) => console.log('[useChatSession] Stream closed:', finalStatus),
+    }, threadId || thread?.thread_id || '', setMessages);
+
+    // Sync API messages to local state
     useEffect(() => {
         if (rawApiMessages.length > 0) {
-            console.log(`[SYNC] API returned ${rawApiMessages.length} messages, current local count: ${messages.length}`);
-            const newMessages: string[] = [];
-            const skippedMessages: string[] = [];
-
-            rawApiMessages.forEach(msg => {
-                if (!processedMessageIds.has(msg.message_id)) {
-                    newMessages.push(msg.message_id);
-                    handleNewMessageFromStream(msg);
-                } else {
-                    skippedMessages.push(msg.message_id);
-                }
-            });
-
-            if (newMessages.length > 0) {
-                console.log(`[SYNC] Processed ${newMessages.length} new messages: ${newMessages.join(', ')}`);
-            }
-            if (skippedMessages.length > 0) {
-                console.log(`[SYNC] Skipped ${skippedMessages.length} already processed messages`);
-            }
+            console.log(`[useChatSession] Syncing ${rawApiMessages.length} API messages`);
+            setMessages(rawApiMessages);
         }
-    }, [rawApiMessages, handleNewMessageFromStream, messages.length, processedMessageIds]);
+    }, [rawApiMessages]);
 
     // Thread info for new chat
     const { data: threadInfo } = useQuery({
@@ -526,48 +531,37 @@ export const useChatSession = (projectId: string) => {
         }
     }, [threadInfo, updateNewChatProject, queryClient, isNewChat]);
 
-    // WORKING PATTERN: Send message with optimistic updates
+    // Start stream effect
+    useEffect(() => {
+        if (agentStream.agentRunId && threadId) {
+            console.log(`[useChatSession] Starting stream for run ${agentStream.agentRunId}`);
+            agentStream.startStreaming(agentStream.agentRunId);
+        }
+    }, [agentStream.agentRunId, threadId]);
+
+    // EXACT FRONTEND PATTERN - Send message
     const sendMessage = useCallback(async (content: string, files?: any[]) => {
         if (!content.trim()) return;
-
-        // FIX RACE CONDITION - Set isSending IMMEDIATELY
         if (isSending) {
-            console.log('[SEND MESSAGE] Already sending, ignoring duplicate send');
+            console.log('[useChatSession] Already sending, ignoring duplicate');
             return;
         }
+
         setIsSending(true);
-        setIsGenerating(true);
 
-        // CONSTRUCT OPTIMISTIC CONTENT TO MATCH API FORMAT
-        let optimisticContent = content;
-        if (files && files.length > 0) {
-            // Add file info to match what API returns - SINGLE newline, not double!
-            const fileInfo = files.map(file => `[Uploaded File: /workspace/${file.name}]`).join('\n');
-            optimisticContent = `${content}\n${fileInfo}`; // FIX: Single \n not \n\n
-        }
-
+        // EXACT FRONTEND PATTERN - Simple optimistic message
         const optimisticUserMessage: Message = {
-            message_id: `temp-user-${Date.now()}-${Math.random()}`,  // UNIQUE temp-user- PREFIX
+            message_id: `temp-${Date.now()}`,  // EXACT FRONTEND PREFIX
             thread_id: threadId || 'temp',
             type: 'user',
             is_llm_message: false,
-            content: { role: 'user', content: optimisticContent },  // MATCH API FORMAT WITH FILES
+            content: { role: 'user', content },
             metadata: files ? { cached_files: files } : {},
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
         };
 
-        setMessages((prev) => {
-            const newCount = prev.length + 1;
-            console.log(`[MESSAGE COUNT] Added optimistic message: ${prev.length} → ${newCount} (${optimisticUserMessage.message_id})`);
-            const newMessages = [...prev, optimisticUserMessage];
-
-            // Debug optimistic message order
-            const orderDebug = newMessages.map((m, i) => `${i}:${m.type}:${m.message_id.substring(0, 8)}`).join(' | ');
-            console.log(`[OPTIMISTIC ARRAY ORDER]: ${orderDebug}`);
-
-            return newMessages;
-        });
+        setMessages(prev => [...prev, optimisticUserMessage]);
 
         try {
             if (isNewChat && !threadId) {
@@ -590,13 +584,11 @@ export const useChatSession = (projectId: string) => {
                 });
 
                 setThreadId(result.thread_id);
-                // DON'T set isSending to false here - let stream starting handle it
                 agentStream.startStreaming(result.agent_run_id);
             } else {
                 // Existing thread
                 const currentThreadId = threadId || thread?.thread_id;
                 if (!currentThreadId) {
-                    // Create thread first
                     const newThread = await createThread.mutateAsync({ projectId });
                     await addMessage.mutateAsync({
                         threadId: newThread.thread_id,
@@ -605,7 +597,6 @@ export const useChatSession = (projectId: string) => {
                     const result = await startAgentMutation.mutateAsync({
                         threadId: newThread.thread_id,
                     });
-                    setIsSending(false);
                     agentStream.startStreaming(result.agent_run_id);
                 } else {
                     const messagePromise = addMessage.mutateAsync({
@@ -623,69 +614,34 @@ export const useChatSession = (projectId: string) => {
                     if (results[1].status === 'rejected') {
                         const error = results[1].reason;
                         if (error instanceof BillingError) {
-                            // Handle billing error - REMOVE optimistic message
-                            setMessages(prev => {
-                                const filtered = prev.filter(m => m.message_id !== optimisticUserMessage.message_id);
-                                console.log(`[MESSAGE COUNT] Removed optimistic (billing error): ${prev.length} → ${filtered.length}`);
-                                return filtered;
-                            });
+                            // EXACT FRONTEND PATTERN - Remove optimistic message on billing error
+                            setMessages(prev => prev.filter(m => m.message_id !== optimisticUserMessage.message_id));
                             setIsSending(false);
-                            setIsGenerating(false);
                             return;
                         }
                         throw new Error(`Failed to start agent: ${error?.message || error}`);
                     }
 
                     const agentResult = results[1].value;
-                    // DON'T set isSending to false here - let stream starting handle it
                     agentStream.startStreaming(agentResult.agent_run_id);
                 }
             }
         } catch (error) {
-            console.error('[ERROR] Failed to send message:', error);
-            // ERROR FALLBACK - Transform message ID instead of removing
-            setMessages((prev) => {
-                const updated = prev.map((m) =>
-                    m.message_id === optimisticUserMessage.message_id
-                        ? { ...m, message_id: `user-error-${Date.now()}` }
-                        : m
-                );
-                console.log(`[MESSAGE COUNT] Transformed optimistic to error: ${prev.length} → ${updated.length}`);
-                return updated;
-            });
-            setIsSending(false);
-            setIsGenerating(false);
+            console.error('[useChatSession] Failed to send message:', error);
+            // EXACT FRONTEND PATTERN - Remove optimistic message on error
+            setMessages(prev => prev.filter(m => m.message_id !== optimisticUserMessage.message_id));
             throw error;
-        }
-    }, [threadId, thread, isNewChat, isInitialized, isSending, agentStream, addMessage, startAgentMutation, createThread, projectId, setIsGenerating, updateNewChatProject]);
-
-    // Clear isSending when stream actually starts OR after timeout
-    useEffect(() => {
-        if (['streaming', 'connecting'].includes(agentStream.status) && isSending) {
-            console.log('[STREAM STATE] Stream started, clearing isSending');
+        } finally {
             setIsSending(false);
         }
-    }, [agentStream.status, isSending]);
+    }, [threadId, thread, isNewChat, isInitialized, isSending, agentStream, addMessage, startAgentMutation, createThread, projectId, updateNewChatProject]);
 
-    // Failsafe: Clear isSending after 5 seconds to prevent getting stuck
-    useEffect(() => {
-        if (isSending) {
-            const timeout = setTimeout(() => {
-                console.log('[FAILSAFE] Clearing isSending after 5 second timeout');
-                setIsSending(false);
-            }, 5000);
-            return () => clearTimeout(timeout);
-        }
-    }, [isSending]);
-
-    const stopAgent = useCallback(() => {
-        agentStream.stopStreaming();
-        setIsGenerating(false);
-        setIsSending(false);
+    const stopAgent = useCallback(async () => {
+        await agentStream.stopStreaming();
         if (agentStream.agentRunId) {
             stopAgentMutation.mutate(agentStream.agentRunId);
         }
-    }, [agentStream, stopAgentMutation, setIsGenerating]);
+    }, [agentStream, stopAgentMutation]);
 
     return {
         thread: thread || (threadId ? { thread_id: threadId } : null),
@@ -697,7 +653,7 @@ export const useChatSession = (projectId: string) => {
         isLoadingMessages: messagesLoading,
         sendMessage,
         stopAgent,
-        isGenerating: agentStream.isStreaming || isSending || ['connecting', 'streaming'].includes(agentStream.status) || (agentStream.agentRunId && !['completed', 'error', 'stopped', 'idle'].includes(agentStream.status)),
+        isGenerating: agentStream.status === 'streaming' || agentStream.status === 'connecting' || isSending,
         streamStatus: agentStream.status,
         streamContent: agentStream.textContent,
         streamError: agentStream.error,

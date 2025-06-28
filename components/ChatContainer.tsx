@@ -134,6 +134,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                 <MessageThread
                     messages={messages}
                     isGenerating={isGenerating}
+                    isSending={isSending}
                     streamContent={streamContent}
                     streamError={streamError}
                     isLoadingMessages={isLoadingMessages}
