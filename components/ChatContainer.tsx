@@ -140,6 +140,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ className }) => {
                     isLoadingMessages={isLoadingMessages}
                     onScrollPositionChange={handleScrollPositionChange}
                     keyboardHeight={keyboardHeight}
+                    sandboxId={selectedProject?.sandbox?.id}
                 />
             </View>
             <ChatInput

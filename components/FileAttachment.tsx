@@ -70,7 +70,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
     const isGrid = layout === 'grid';
 
     // Debug logging
-    console.log(`[FileAttachment] ${filename} - layout: ${layout}, isGrid: ${isGrid}, isImage: ${isImage}`);
+    console.log(`[FileAttachment] ${filename} - sandboxId: ${sandboxId || 'none'}, localUri: ${localUri ? 'present' : 'none'}`);
 
     // Use authenticated image loading for images
     const {
@@ -86,6 +86,10 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 
     // For local files without sandboxId, use localUri directly
     const localImageUri = !sandboxId && isImage && localUri ? localUri : null;
+
+    // Log image state
+    const imageSource = localImageUri ? 'LOCAL' : imageUrl ? (imageUrl.startsWith('data:') ? 'CACHED' : 'SERVER') : 'NONE';
+    console.log(`[FileAttachment] ${filename} will use: ${imageSource}${imageLoading ? ' (upgrading)' : ''}`);
 
     const handlePress = () => {
         onPress?.(filepath);
@@ -108,6 +112,10 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 
         // For local files (no sandboxId), use blob URL directly
         if (!sandboxId && localImageUri) {
+            console.log(`[FileAttachment] RENDERING LOCAL IMAGE - ${filename}`);
+            console.log(`[FileAttachment] - localImageUri: ${localImageUri}`);
+            console.log(`[FileAttachment] - layout: ${isGrid ? 'grid' : 'inline'}`);
+
             if (isGrid) {
                 return (
                     <View
@@ -132,6 +140,12 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
                                 source={{ uri: localImageUri }}
                                 style={styles.imageGridPreview}
                                 resizeMode="cover"
+                                onLoad={() => {
+                                    console.log(`[FileAttachment] LOCAL IMAGE LOADED (grid) - ${filename}`);
+                                }}
+                                onError={(error) => {
+                                    console.log(`[FileAttachment] LOCAL IMAGE ERROR (grid) - ${filename}:`, error.nativeEvent.error);
+                                }}
                             />
                         </TouchableOpacity>
                     </View>
@@ -154,14 +168,25 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
                             source={{ uri: localImageUri }}
                             style={styles.imageInlinePreview}
                             resizeMode="contain"
+                            onLoad={() => {
+                                console.log(`[FileAttachment] LOCAL IMAGE LOADED (inline) - ${filename}`);
+                            }}
+                            onError={(error) => {
+                                console.log(`[FileAttachment] LOCAL IMAGE ERROR (inline) - ${filename}:`, error.nativeEvent.error);
+                            }}
                         />
                     </TouchableOpacity>
                 );
             }
         }
 
-        // Loading state (only for server images)
-        if (imageLoading && sandboxId) {
+        // Loading state (only for server images AND only if we have no image data at all)
+        if (imageLoading && sandboxId && !imageUrl) {
+            console.log(`[FileAttachment] RENDERING LOADING STATE - ${filename}`);
+            console.log(`[FileAttachment] - sandboxId: ${sandboxId}`);
+            console.log(`[FileAttachment] - isProcessing: ${isProcessing}`);
+            console.log(`[FileAttachment] - imageUrl: ${imageUrl ? 'present' : 'none'} (no loading if we have cached data)`);
+
             return (
                 <TouchableOpacity
                     style={[
@@ -187,6 +212,10 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 
         // Error state (but not if processing)
         if (imageError && !isProcessing) {
+            console.log(`[FileAttachment] RENDERING ERROR STATE - ${filename}`);
+            console.log(`[FileAttachment] - error: ${imageError.message || 'unknown error'}`);
+            console.log(`[FileAttachment] - isProcessing: ${isProcessing}`);
+
             return (
                 <TouchableOpacity
                     style={[containerStyle, { height: minHeight }]}
@@ -210,8 +239,18 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
             );
         }
 
-        // Success: Show image preview with proper aspect ratio
-        if (isGrid) {
+        // Success: Show image preview with proper aspect ratio (cached or server data)
+        if (imageUrl) {
+            console.log(`[FileAttachment] HAVE IMAGE DATA - ${filename}`);
+            console.log(`[FileAttachment] - imageUrl source: ${imageUrl.startsWith('data:') ? 'CACHED_BLOB' : 'SERVER'}`);
+            console.log(`[FileAttachment] - isLoading: ${imageLoading} (upgrading in background)`);
+        }
+
+        if (imageUrl && isGrid) {
+            console.log(`[FileAttachment] RENDERING SERVER IMAGE (grid) - ${filename}`);
+            console.log(`[FileAttachment] - imageUrl: ${imageUrl.substring(0, 50)}`);
+            console.log(`[FileAttachment] - sandboxId: ${sandboxId}`);
+
             // Grid mode: Use custom container without flex row constraints
             return (
                 <View
@@ -236,15 +275,24 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
                             source={imageUrl ? { uri: imageUrl } : undefined}
                             style={styles.imageGridPreview}
                             resizeMode="cover"
+                            onLoad={() => {
+                                console.log(`[FileAttachment] SERVER IMAGE LOADED (grid) - ${filename}`);
+                                console.log(`[FileAttachment] - imageUrl: ${imageUrl.substring(0, 50)}`);
+                            }}
                             onError={(error) => {
-                                console.log('[FileAttachment] Image load error:', error.nativeEvent.error);
-                                console.log('[FileAttachment] Image URL:', imageUrl);
+                                console.log(`[FileAttachment] SERVER IMAGE ERROR (grid) - ${filename}:`, error.nativeEvent.error);
+                                console.log(`[FileAttachment] - imageUrl: ${imageUrl.substring(0, 50)}`);
+                                console.log(`[FileAttachment] - sandboxId: ${sandboxId}`);
                             }}
                         />
                     </TouchableOpacity>
                 </View>
             );
-        } else {
+        } else if (imageUrl) {
+            console.log(`[FileAttachment] RENDERING SERVER IMAGE (inline) - ${filename}`);
+            console.log(`[FileAttachment] - imageUrl: ${imageUrl.substring(0, 50)}`);
+            console.log(`[FileAttachment] - sandboxId: ${sandboxId}`);
+
             // Inline mode: Fixed height with contain
             return (
                 <TouchableOpacity
@@ -263,9 +311,14 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
                         source={imageUrl ? { uri: imageUrl } : undefined}
                         style={styles.imageInlinePreview}
                         resizeMode="contain"
+                        onLoad={() => {
+                            console.log(`[FileAttachment] SERVER IMAGE LOADED (inline) - ${filename}`);
+                            console.log(`[FileAttachment] - imageUrl: ${imageUrl.substring(0, 50)}`);
+                        }}
                         onError={(error) => {
-                            console.log('[FileAttachment] Image load error:', error.nativeEvent.error);
-                            console.log('[FileAttachment] Image URL:', imageUrl);
+                            console.log(`[FileAttachment] SERVER IMAGE ERROR (inline) - ${filename}:`, error.nativeEvent.error);
+                            console.log(`[FileAttachment] - imageUrl: ${imageUrl.substring(0, 50)}`);
+                            console.log(`[FileAttachment] - sandboxId: ${sandboxId}`);
                         }}
                     />
                 </TouchableOpacity>

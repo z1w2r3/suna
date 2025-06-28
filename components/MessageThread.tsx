@@ -127,6 +127,7 @@ interface MessageThreadProps {
     isLoadingMessages?: boolean;
     onScrollPositionChange?: (isAtBottom: boolean) => void;
     keyboardHeight?: number;
+    sandboxId?: string;
 }
 
 // EXACT FRONTEND PATTERN - Simple thinking animation
@@ -168,8 +169,12 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     isLoadingMessages = false,
     onScrollPositionChange,
     keyboardHeight = 0,
+    sandboxId,
 }) => {
     const theme = useTheme();
+
+    // Log sandboxId for debugging
+    console.log(`[MessageThread] sandboxId: ${sandboxId || 'undefined'}`);
     const flatListRef = useRef<FlatList>(null);
     const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -256,7 +261,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         return (
             <MessageItem
                 message={item}
-                sandboxId={undefined}
+                sandboxId={sandboxId}
                 onLongPress={handleLongPress}
                 onToolPress={handleToolPress}
             />

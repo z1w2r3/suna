@@ -97,7 +97,6 @@ const setupFetchStream = async (
     onClose: () => void;
   }
 ): Promise<() => void> => {
-  console.log(`[XHR-STREAM] Setting up XHR stream for ${agentRunId}`);
   
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
@@ -147,8 +146,7 @@ const setupFetchStream = async (
             if (line.startsWith('data: ')) {
               const data = line.slice(6).trim();
               if (data && data !== '[DONE]') {
-                console.log(`[XHR-STREAM] Processing data:`, data.substring(0, 50) + '...');
-                callbacks.onMessage(line); // Send the full "data: ..." line
+                callbacks.onMessage(line);
               }
             }
           }
