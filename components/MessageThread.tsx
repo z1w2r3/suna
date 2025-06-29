@@ -2,6 +2,7 @@ import { Message } from '@/api/chat-api';
 import { commonStyles } from '@/constants/CommonStyles';
 import { fontWeights } from '@/constants/Fonts';
 import { useTheme } from '@/hooks/useThemeColor';
+import { useOpenToolView } from '@/stores/ui-store';
 
 import { parseFileAttachments } from '@/utils/file-parser';
 import { Markdown } from '@/utils/markdown-renderer';
@@ -172,6 +173,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     sandboxId,
 }) => {
     const theme = useTheme();
+    const openToolView = useOpenToolView();
 
     // Log sandboxId for debugging
     console.log(`[MessageThread] sandboxId: ${sandboxId || 'undefined'}`);
@@ -248,8 +250,8 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     }, []);
 
     const handleToolPress = useCallback((toolCall: any, messageId: string) => {
-        console.log('Tool pressed:', toolCall, messageId);
-    }, []);
+        openToolView(toolCall, messageId);
+    }, [openToolView]);
 
     const renderMessage = ({ item }: { item: Message }) => {
         // Skip rendering pure tool result messages

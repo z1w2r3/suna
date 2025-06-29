@@ -4,12 +4,13 @@ import { usePanelTopOffset } from '@/constants/SafeArea';
 import { useAuth } from '@/hooks/useAuth';
 import { useThemedStyles } from '@/hooks/useThemeColor';
 import { useIsNewChatMode, useResetNewChatSession, useSelectedProject, useSetNewChatMode, useSetSelectedProject } from '@/stores/ui-store';
-import { SquarePen } from 'lucide-react-native';
+import { ChevronsUpDown, SquarePen } from 'lucide-react-native';
 import React, { useRef, useState } from 'react';
 import { ScrollView, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChatActionModal } from './ChatActionModal';
 import { DeleteConfirmationModal } from './DeleteConfirmationModal';
+import { SettingsDrawer } from './SettingsDrawer';
 import { ShareModal } from './ShareModal';
 import { SkeletonProjects } from './Skeleton';
 import { Body, Caption, H3 } from './Typography';
@@ -27,6 +28,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [shareModalVisible, setShareModalVisible] = useState(false);
     const [actionModalVisible, setActionModalVisible] = useState(false);
+    const [settingsDrawerVisible, setSettingsDrawerVisible] = useState(false);
     const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null);
     const [projectToShare, setProjectToShare] = useState<{ id: string; name: string; isPublic?: boolean } | null>(null);
     const [selectedChatLayout, setSelectedChatLayout] = useState<{ x: number; y: number; width: number; height: number } | undefined>();
@@ -39,7 +41,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
     const deleteProjectMutation = useDeleteProject();
 
     // Use auth context
-    const { user, signOut } = useAuth();
+    const { user } = useAuth();
 
     // Use zustand for chat state
     const selectedProject = useSelectedProject();
@@ -214,25 +216,15 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
             paddingVertical: 12,
             fontStyle: 'italic' as const,
         },
-        signOutButton: {
-            paddingVertical: 8,
-            paddingHorizontal: 12,
-            borderRadius: 6,
-            backgroundColor: theme.mutedWithOpacity(0.1),
-            marginTop: 8,
-        },
-        signOutText: {
-            color: theme.destructive,
-            fontSize: 13,
-            fontFamily: fontWeights[500],
-            textAlign: 'center' as const,
-        },
         selectedTaskItem: {
             backgroundColor: theme.mutedWithOpacity(0.1),
             borderRadius: 12,
         },
         selectedTaskText: {
             color: theme.foreground,
+        },
+        settingsIcon: {
+            opacity: 0.6,
         },
     }));
 
@@ -299,15 +291,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                 </Body>
             </TouchableOpacity>
         ));
-    };
-
-    const handleSignOut = async () => {
-        try {
-            await signOut();
-            onClose();
-        } catch (error) {
-            console.error('Error signing out:', error);
-        }
     };
 
     const handleProjectSelect = (project: any) => {
@@ -412,6 +395,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
         return name.charAt(0).toUpperCase();
     };
 
+    const handleSettingsDrawerOpen = () => {
+        setSettingsDrawerVisible(true);
+    };
+
+    const handleSettingsDrawerClose = () => {
+        setSettingsDrawerVisible(false);
+    };
+
     return (
         <View style={styles.panel}>
             <View style={styles.header}>
@@ -466,7 +457,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
 
             {/* User Section */}
             <View style={styles.userSection}>
-                <TouchableOpacity style={styles.userInfo}>
+                <TouchableOpacity style={styles.userInfo} onPress={handleSettingsDrawerOpen}>
                     <View style={styles.userAvatar}>
                         <Caption style={styles.userInitial}>{getUserInitial()}</Caption>
                     </View>
@@ -474,10 +465,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                         <Body style={styles.userName}>{getUserDisplayName()}</Body>
                         <Caption style={styles.userEmail}>{user?.email || 'No email'}</Caption>
                     </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-                    <Caption style={styles.signOutText}>Sign Out</Caption>
+                    <ChevronsUpDown size={16} color={styles.title.color} style={styles.settingsIcon} />
                 </TouchableOpacity>
             </View>
 
@@ -507,6 +495,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ isVisible, onClose }) => {
                 isDeleting={deleteProjectMutation.isPending}
                 onClose={handleDeleteCancel}
                 onConfirm={handleDeleteConfirm}
+            />
+
+            {/* Settings Drawer */}
+            <SettingsDrawer
+                visible={settingsDrawerVisible}
+                onClose={handleSettingsDrawerClose}
             />
         </View>
     );
