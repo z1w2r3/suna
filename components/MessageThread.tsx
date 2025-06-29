@@ -7,6 +7,7 @@ import { useOpenToolView } from '@/stores/ui-store';
 import { parseFileAttachments } from '@/utils/file-parser';
 import { Markdown } from '@/utils/markdown-renderer';
 import { parseMessage } from '@/utils/message-parser';
+import { ChevronDown } from 'lucide-react-native';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Keyboard, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import Animated, {
@@ -235,6 +236,12 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         }
     }, [isAtBottom, onScrollPositionChange]);
 
+    const scrollToBottom = useCallback(() => {
+        if (flatListRef.current) {
+            flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+        }
+    }, []);
+
     const handleLongPress = useCallback((messageText: string, layout: { x: number; y: number; width: number; height: number }, messageId: string) => {
         setSelectedMessageText(messageText);
         setSourceLayout(layout);
@@ -358,6 +365,16 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                 onContentSizeChange={handleContentSizeChange}
             />
 
+            {!isAtBottom && (
+                <TouchableOpacity
+                    style={[styles.scrollToBottomButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                    onPress={scrollToBottom}
+                    activeOpacity={0.8}
+                >
+                    <ChevronDown size={20} color={theme.foreground} strokeWidth={2} />
+                </TouchableOpacity>
+            )}
+
             <MessageActionModal
                 visible={modalVisible}
                 onClose={handleCloseModal}
@@ -435,6 +452,18 @@ const styles = StyleSheet.create({
         paddingBottom: 12,
         paddingHorizontal: 0,
         alignItems: 'flex-start',
+    },
+    scrollToBottomButton: {
+        position: 'absolute',
+        bottom: 20,
+        right: 20,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        ...commonStyles.shadow,
     },
     markdownContent: {
         flex: 1,
