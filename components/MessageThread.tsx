@@ -6,7 +6,7 @@ import { useOpenToolView } from '@/stores/ui-store';
 
 import { parseFileAttachments } from '@/utils/file-parser';
 import { Markdown } from '@/utils/markdown-renderer';
-import { parseMessage } from '@/utils/message-parser';
+import { parseMessage, processStreamContent } from '@/utils/message-parser';
 import { ChevronDown } from 'lucide-react-native';
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Keyboard, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
@@ -279,7 +279,7 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
 
     const keyExtractor = (item: Message) => item.message_id;
 
-    // EXACT FRONTEND PATTERN - Simple footer
+    // EXACT FRONTEND PATTERN - Simple footer with partial tool recognition
     const renderFooter = () => {
         if (!isGenerating && !isSending) return null;
 
@@ -297,11 +297,26 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
         }
 
         if (showStreamingText) {
+            // Process streaming content for partial tool recognition
+            const processedStream = processStreamContent(streamContent);
+            const { cleanContent, currentToolName, isStreamingTool } = processedStream;
+
             return (
                 <View style={styles.streamingContainer}>
-                    <Markdown style={[styles.markdownContent]}>
-                        {streamContent}
-                    </Markdown>
+                    {cleanContent && (
+                        <Markdown style={[styles.markdownContent]}>
+                            {cleanContent}
+                        </Markdown>
+                    )}
+
+                    {isStreamingTool && currentToolName && (
+                        <View style={styles.toolIndicatorContainer}>
+                            <Body style={[styles.toolIndicatorText, { color: theme.mutedForeground }]}>
+                                🔧 {currentToolName}
+                            </Body>
+                        </View>
+                    )}
+
                     <View style={styles.streamingIndicator}>
                         <Body style={[styles.streamingIndicatorText, { color: theme.mutedForeground }]}>
                             ●
@@ -467,5 +482,14 @@ const styles = StyleSheet.create({
     },
     markdownContent: {
         flex: 1,
+    },
+    toolIndicatorContainer: {
+        paddingVertical: 4,
+        alignItems: 'flex-start',
+    },
+    toolIndicatorText: {
+        fontSize: 13,
+        fontStyle: 'italic',
+        opacity: 0.8,
     },
 });
