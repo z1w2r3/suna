@@ -1,3 +1,4 @@
+import { FileBrowserModal } from '@/components/FileBrowser';
 import { AuthProvider } from '@/hooks/useAuth';
 import { cleanupAppState, initializeAppState, initializePersistence, queryClient } from '@/stores/query-client';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -31,6 +32,7 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
         <QueryClientProvider client={queryClient}>
             <AuthProvider>
                 {children}
+                <FileBrowserModal />
             </AuthProvider>
         </QueryClientProvider>
     );

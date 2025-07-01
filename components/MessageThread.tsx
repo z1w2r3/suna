@@ -1,6 +1,7 @@
 import { Message } from '@/api/chat-api';
 import { commonStyles } from '@/constants/CommonStyles';
 import { fontWeights } from '@/constants/Fonts';
+import { useFileBrowser } from '@/hooks/useFileBrowser';
 import { useTheme } from '@/hooks/useThemeColor';
 import { useOpenToolView } from '@/stores/ui-store';
 
@@ -33,6 +34,7 @@ interface MessageItemProps {
 const MessageItem = memo<MessageItemProps>(({ message, sandboxId, onLongPress, onToolPress }) => {
     const theme = useTheme();
     const messageRef = useRef<View>(null);
+    const { openFileBrowser } = useFileBrowser();
 
     const parsedMessage = useMemo(() => parseMessage(message), [message]);
 
@@ -52,6 +54,10 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, onLongPress, o
 
     const handleFilePress = (filepath: string) => {
         console.log('File pressed:', filepath);
+        // Open file browser to view the file
+        if (sandboxId) {
+            openFileBrowser(sandboxId, filepath);
+        }
     };
 
     const isUser = message.type === 'user';
