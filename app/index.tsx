@@ -14,7 +14,7 @@ import {
     useSetLeftPanelVisible,
     useSetRightPanelVisible
 } from '@/stores/ui-store';
-import React, { useState } from 'react';
+import React from 'react';
 import { View } from 'react-native';
 
 export default function HomeScreen() {
@@ -23,8 +23,6 @@ export default function HomeScreen() {
     const rightPanelVisible = useRightPanelVisible();
     const setLeftPanelVisible = useSetLeftPanelVisible();
     const setRightPanelVisible = useSetRightPanelVisible();
-
-    const [authOverlayVisible, setAuthOverlayVisible] = useState(false);
 
     const { user, loading } = useAuth();
     const selectedProject = useSelectedProject();
@@ -71,16 +69,10 @@ export default function HomeScreen() {
     if (!user) {
         return (
             <View style={styles.container}>
-                <View style={styles.header}>
-                    <ChatHeader
-                        onMenuPress={toggleLeftPanel}
-                        onSettingsPress={toggleRightPanel}
-                        selectedProject={selectedProject}
-                    />
-                </View>
-                <View style={styles.chatContainer}>
-                    <ChatContainer />
-                </View>
+                <AuthOverlay
+                    visible={true}
+                    onClose={() => { }}
+                />
             </View>
         );
     }
@@ -109,11 +101,6 @@ export default function HomeScreen() {
                     <ChatContainer />
                 </View>
             </PanelContainer>
-
-            <AuthOverlay
-                visible={authOverlayVisible}
-                onClose={() => setAuthOverlayVisible(false)}
-            />
         </View>
     );
 } 

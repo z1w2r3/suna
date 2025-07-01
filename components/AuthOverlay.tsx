@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import {
     Alert,
     KeyboardAvoidingView,
+    Linking,
     Modal,
     Platform,
     Text,
@@ -21,8 +22,11 @@ interface AuthOverlayProps {
 export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    const [isSignUp, setIsSignUp] = useState(false);
+    const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
+    const [showSuccess, setShowSuccess] = useState(false);
+    const [successEmail, setSuccessEmail] = useState('');
 
     const styles = useThemedStyles((theme) => ({
         overlay: {
@@ -93,18 +97,99 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
             fontSize: 18,
             fontFamily: fontWeights[500],
         },
+        successContainer: {
+            alignItems: 'center' as const,
+            padding: 20,
+        },
+        successIcon: {
+            width: 80,
+            height: 80,
+            borderRadius: 40,
+            backgroundColor: '#10B981',
+            alignItems: 'center' as const,
+            justifyContent: 'center' as const,
+            marginBottom: 24,
+        },
+        successIconText: {
+            fontSize: 32,
+            color: '#ffffff',
+        },
+        successTitle: {
+            fontSize: 28,
+            fontFamily: fontWeights[600],
+            color: theme.foreground,
+            textAlign: 'center' as const,
+            marginBottom: 12,
+        },
+        successDescription: {
+            fontSize: 16,
+            color: theme.mutedForeground,
+            textAlign: 'center' as const,
+            marginBottom: 8,
+            lineHeight: 22,
+        },
+        successEmail: {
+            fontSize: 16,
+            fontFamily: fontWeights[600],
+            color: theme.foreground,
+            textAlign: 'center' as const,
+            marginBottom: 24,
+        },
+        successNote: {
+            backgroundColor: '#10B98120',
+            borderColor: '#10B98140',
+            borderWidth: 1,
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 32,
+        },
+        successNoteText: {
+            fontSize: 14,
+            color: '#059669',
+            textAlign: 'center' as const,
+            lineHeight: 20,
+        },
+        successButtonContainer: {
+            width: '100%' as const,
+            gap: 12,
+        },
+        legalText: {
+            fontSize: 12,
+            color: theme.mutedForeground,
+            textAlign: 'center' as const,
+            marginTop: 20,
+            lineHeight: 16,
+            paddingHorizontal: 8,
+        },
+        legalLink: {
+            color: theme.primary,
+        },
     }));
 
     const handleAuth = async () => {
-        if (!email.trim() || !password.trim()) {
-            Alert.alert('Error', 'Please fill in all fields');
+        if (!email.trim()) {
+            Alert.alert('Error', 'Please enter your email');
+            return;
+        }
+
+        if (mode !== 'forgot' && !password.trim()) {
+            Alert.alert('Error', 'Please enter your password');
             return;
         }
 
         setLoading(true);
 
         try {
-            if (isSignUp) {
+            if (mode === 'signup') {
+                if (password !== confirmPassword) {
+                    Alert.alert('Error', 'Passwords do not match');
+                    return;
+                }
+                if (password.length < 6) {
+                    Alert.alert('Error', 'Password must be at least 6 characters');
+                    return;
+                }
+
                 const { error } = await supabase.auth.signUp({
                     email: email.trim(),
                     password: password.trim(),
@@ -113,8 +198,17 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                 if (error) {
                     Alert.alert('Sign Up Error', error.message);
                 } else {
-                    Alert.alert('Success', 'Please check your email to confirm your account');
-                    onClose();
+                    setSuccessEmail(email.trim());
+                    setShowSuccess(true);
+                }
+            } else if (mode === 'forgot') {
+                const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+
+                if (error) {
+                    Alert.alert('Error', error.message);
+                } else {
+                    Alert.alert('Success', 'Check your email for a password reset link');
+                    setMode('signin');
                 }
             } else {
                 const { error } = await supabase.auth.signInWithPassword({
@@ -123,7 +217,32 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                 });
 
                 if (error) {
-                    Alert.alert('Sign In Error', error.message);
+                    if (error.message === 'Email not confirmed') {
+                        Alert.alert(
+                            'Email Not Confirmed',
+                            'Please check your email and click the confirmation link before signing in.',
+                            [
+                                { text: 'Cancel', style: 'cancel' },
+                                {
+                                    text: 'Resend Email',
+                                    onPress: async () => {
+                                        const { error: resendError } = await supabase.auth.resend({
+                                            type: 'signup',
+                                            email: email.trim()
+                                        });
+
+                                        if (resendError) {
+                                            Alert.alert('Error', resendError.message);
+                                        } else {
+                                            Alert.alert('Success', 'Confirmation email sent! Please check your inbox.');
+                                        }
+                                    }
+                                }
+                            ]
+                        );
+                    } else {
+                        Alert.alert('Sign In Error', error.message);
+                    }
                 } else {
                     onClose();
                 }
@@ -138,12 +257,24 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
     const resetForm = () => {
         setEmail('');
         setPassword('');
-        setIsSignUp(false);
+        setConfirmPassword('');
+        setMode('signin');
+        setShowSuccess(false);
+        setSuccessEmail('');
     };
 
     const handleClose = () => {
         resetForm();
         onClose();
+    };
+
+    const handleBackToSignIn = () => {
+        setShowSuccess(false);
+        setSuccessEmail('');
+        setMode('signin');
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
     };
 
     return (
@@ -157,52 +288,134 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                         <Text style={styles.closeText}>✕</Text>
                     </TouchableOpacity>
 
-                    <Text style={styles.title}>
-                        {isSignUp ? 'Create Account' : 'Sign In'}
-                    </Text>
+                    {showSuccess ? (
+                        <View style={styles.successContainer}>
+                            <View style={styles.successIcon}>
+                                <Text style={styles.successIconText}>✉</Text>
+                            </View>
 
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Email"
-                        placeholderTextColor={styles.closeText.color}
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                    />
+                            <Text style={styles.successTitle}>Check your email</Text>
 
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Password"
-                        placeholderTextColor={styles.closeText.color}
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                    />
+                            <Text style={styles.successDescription}>
+                                We've sent a confirmation link to:
+                            </Text>
 
-                    <TouchableOpacity
-                        style={[styles.button, loading && styles.buttonDisabled]}
-                        onPress={handleAuth}
-                        disabled={loading}
-                    >
-                        <Text style={styles.buttonText}>
-                            {loading ? 'Loading...' : isSignUp ? 'Sign Up' : 'Sign In'}
-                        </Text>
-                    </TouchableOpacity>
+                            <Text style={styles.successEmail}>{successEmail}</Text>
 
-                    <TouchableOpacity
-                        style={styles.switchButton}
-                        onPress={() => setIsSignUp(!isSignUp)}
-                    >
-                        <Text style={styles.switchText}>
-                            {isSignUp
-                                ? 'Already have an account? Sign In'
-                                : 'Need an account? Sign Up'}
-                        </Text>
-                    </TouchableOpacity>
+                            <View style={styles.successNote}>
+                                <Text style={styles.successNoteText}>
+                                    Click the link in the email to activate your account. If you don't see the email, check your spam folder.
+                                </Text>
+                            </View>
+
+                            <View style={styles.successButtonContainer}>
+                                <TouchableOpacity style={styles.button} onPress={handleBackToSignIn}>
+                                    <Text style={styles.buttonText}>Back to Sign In</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[styles.button, { backgroundColor: 'transparent', borderWidth: 1, borderColor: styles.button.backgroundColor }]}
+                                    onPress={handleClose}
+                                >
+                                    <Text style={[styles.buttonText, { color: styles.button.backgroundColor }]}>Close</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    ) : (
+                        <>
+                            <Text style={styles.title}>
+                                {mode === 'signup' ? 'Create Account' : mode === 'forgot' ? 'Reset Password' : 'Sign In'}
+                            </Text>
+
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Email"
+                                placeholderTextColor={styles.closeText.color}
+                                value={email}
+                                onChangeText={setEmail}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                            />
+
+                            {mode !== 'forgot' && (
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Password"
+                                    placeholderTextColor={styles.closeText.color}
+                                    value={password}
+                                    onChangeText={setPassword}
+                                    secureTextEntry
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                />
+                            )}
+
+                            {mode === 'signup' && (
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Confirm Password"
+                                    placeholderTextColor={styles.closeText.color}
+                                    value={confirmPassword}
+                                    onChangeText={setConfirmPassword}
+                                    secureTextEntry
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                />
+                            )}
+
+                            <TouchableOpacity
+                                style={[styles.button, loading && styles.buttonDisabled]}
+                                onPress={handleAuth}
+                                disabled={loading}
+                            >
+                                <Text style={styles.buttonText}>
+                                    {loading ? 'Loading...' : mode === 'signup' ? 'Sign Up' : mode === 'forgot' ? 'Send Reset Link' : 'Sign In'}
+                                </Text>
+                            </TouchableOpacity>
+
+                            {mode === 'signin' && (
+                                <TouchableOpacity
+                                    style={styles.switchButton}
+                                    onPress={() => setMode('forgot')}
+                                >
+                                    <Text style={styles.switchText}>Forgot Password?</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            <TouchableOpacity
+                                style={styles.switchButton}
+                                onPress={() => setMode(mode === 'signup' ? 'signin' : 'signup')}
+                            >
+                                <Text style={styles.switchText}>
+                                    {mode === 'signup'
+                                        ? 'Already have an account? Sign In'
+                                        : mode === 'forgot'
+                                            ? 'Back to Sign In'
+                                            : 'Need an account? Sign Up'}
+                                </Text>
+                            </TouchableOpacity>
+
+                            <View>
+                                <Text style={styles.legalText}>
+                                    By continuing, you agree to our{' '}
+                                    <Text
+                                        style={styles.legalLink}
+                                        onPress={() => Linking.openURL('https://www.suna.so/legal?tab=terms')}
+                                    >
+                                        Terms of Service
+                                    </Text>
+                                    {' '}and{' '}
+                                    <Text
+                                        style={styles.legalLink}
+                                        onPress={() => Linking.openURL('https://www.suna.so/legal?tab=privacy')}
+                                    >
+                                        Privacy Policy
+                                    </Text>
+                                </Text>
+                            </View>
+                        </>
+                    )}
                 </View>
             </KeyboardAvoidingView>
         </Modal>

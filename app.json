@@ -5,6 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
+    "owner": "kortix",
     "scheme": "sunamobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -87,9 +88,6 @@
       "typedRoutes": true
     },
     "extra": {
-      "eas": {
-        "projectId": "suna-mobile"
-      },
       "metadata": {
         "applicationName": "Suna",
         "authors": "Kortix Team",
