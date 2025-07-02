@@ -4,6 +4,7 @@ import { FileType, getEstimatedFileSize, getFileType } from '@/utils/file-parser
 import { File, FileAudio, FileCode, FileImage, FileText, FileVideo } from 'lucide-react-native';
 import React from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getRendererForExtension, hasRenderer } from './file-renderers';
 
 interface FileAttachmentProps {
     filepath: string;
@@ -68,9 +69,10 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
 
     const isImage = fileType === 'image';
     const isGrid = layout === 'grid';
+    const hasPreviewRenderer = hasRenderer(extension);
 
     // Debug logging
-    console.log(`[FileAttachment] ${filename} - sandboxId: ${sandboxId || 'none'}, localUri: ${localUri ? 'present' : 'none'}`);
+    console.log(`[FileAttachment] ${filename} - sandboxId: ${sandboxId || 'none'}, localUri: ${localUri ? 'present' : 'none'}, hasRenderer: ${hasPreviewRenderer}`);
 
     // Use authenticated image loading for images
     const {
@@ -103,6 +105,39 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
         },
         isGrid ? styles.gridContainer : styles.inlineContainer
     ];
+
+    // FILE RENDERER PREVIEW LOGIC (HTML, Markdown, etc.)
+    if (hasPreviewRenderer && showPreview && isGrid) {
+        const RendererComponent = getRendererForExtension(extension);
+
+        if (RendererComponent) {
+            console.log(`[FileAttachment] RENDERING WITH ${extension.toUpperCase()} RENDERER - ${filename}`);
+
+            return (
+                <View
+                    style={{
+                        backgroundColor: theme.sidebar,
+                        borderColor: theme.border,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        overflow: 'hidden',
+                        width: '100%',
+                        aspectRatio: 1.5,
+                        maxHeight: 250,
+                        minHeight: 150,
+                    }}
+                >
+                    <RendererComponent
+                        filepath={filepath}
+                        sandboxId={sandboxId}
+                        filename={filename}
+                        uploadedBlob={uploadedBlob}
+                        onExternalOpen={handlePress}
+                    />
+                </View>
+            );
+        }
+    }
 
     // IMAGES ALWAYS SHOW AS PREVIEWS
     if (isImage && showPreview) {
@@ -251,7 +286,6 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
             console.log(`[FileAttachment] - imageUrl: ${imageUrl.substring(0, 50)}`);
             console.log(`[FileAttachment] - sandboxId: ${sandboxId}`);
 
-            // Grid mode: Use custom container without flex row constraints
             return (
                 <View
                     style={{
@@ -293,7 +327,6 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
             console.log(`[FileAttachment] - imageUrl: ${imageUrl.substring(0, 50)}`);
             console.log(`[FileAttachment] - sandboxId: ${sandboxId}`);
 
-            // Inline mode: Fixed height with contain
             return (
                 <TouchableOpacity
                     style={[
@@ -326,7 +359,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({
         }
     }
 
-    // Regular file display (non-images)
+    // Regular file display (non-images, non-renderer files)
     return (
         <TouchableOpacity
             style={[containerStyle, { opacity: isUploading ? 0.7 : 1 }]}
