@@ -10,7 +10,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "description": "Suna is a fully open source AI assistant that helps you accomplish real-world tasks with ease. Through natural conversation, Suna becomes your digital companion for research, data analysis, and everyday challenges.",
-    "primaryColor": "#000000",
+    "primaryColor": "#121215",
     "privacy": "public",
     "platforms": [
       "ios",
@@ -64,8 +64,8 @@
       "startUrl": "/",
       "display": "standalone",
       "orientation": "portrait",
-      "themeColor": "#000000",
-      "backgroundColor": "#ffffff",
+      "themeColor": "#121215",
+      "backgroundColor": "#121215",
       "lang": "en",
       "scope": "/",
       "crossorigin": "use-credentials"
@@ -75,10 +75,10 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/kortix-splash.png",
+          "imageWidth": 400,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#121215"
         }
       ],
       "expo-font",
