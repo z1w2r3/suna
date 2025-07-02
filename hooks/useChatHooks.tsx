@@ -191,7 +191,6 @@ export const useAgentStream = (
         const currentThreadId = threadIdRef.current;
         const currentSetMessages = setMessagesRef.current;
 
-        console.log(`[useAgentStream] Finalizing stream for ${runId} on thread ${currentThreadId} with status: ${finalStatus}`);
 
         if (streamCleanupRef.current) {
             streamCleanupRef.current();
@@ -208,11 +207,9 @@ export const useAgentStream = (
         // EXACT FRONTEND PATTERN - Refetch messages on finalization
         const terminalStatuses = ['completed', 'stopped', 'failed', 'error', 'agent_not_running'];
         if (currentThreadId && terminalStatuses.includes(finalStatus)) {
-            console.log(`[useAgentStream] Refetching messages for thread ${currentThreadId}`);
             getMessages(currentThreadId)
                 .then((messagesData: Message[]) => {
                     if (isMountedRef.current && messagesData) {
-                        console.log(`[useAgentStream] Refetched ${messagesData.length} messages`);
                         currentSetMessages(messagesData);
                     }
                 })
@@ -236,7 +233,6 @@ export const useAgentStream = (
         if (processedData.includes('Run data not available for streaming') ||
             processedData.includes('Stream ended with status: completed') ||
             processedData.includes('"status": "completed"')) {
-            console.log('[useAgentStream] Detected completion message');
             finalizeStream('completed', currentRunIdRef.current);
             return;
         }
@@ -255,7 +251,6 @@ export const useAgentStream = (
 
             // Handle completion status
             if (jsonData.status === 'completed') {
-                console.log('[useAgentStream] Stream completed');
                 finalizeStream('completed', currentRunIdRef.current);
                 return;
             }

@@ -67,16 +67,21 @@ export function isNewXmlFormat(content: string): boolean {
 }
 
 export function extractToolNameFromStream(content: string): string | null {
-  const invokeMatch = content.match(/<invoke\s+name=["']([^"']+)["']/i);
+  // Only match COMPLETE invoke patterns with proper closing quotes
+  const invokeMatch = content.match(/<invoke\s+name=["']([^"']+)["']>/i);
   if (invokeMatch) {
     const toolName = invokeMatch[1].replace(/_/g, '-');
     return formatToolNameForDisplay(toolName);
   }
 
-  const oldFormatMatch = content.match(/<([a-zA-Z\-_]+)(?:\s+[^>]*)?>(?!\/)/);
+  // For old format, only match complete opening tags (with >)
+  const oldFormatMatch = content.match(/<([a-zA-Z\-_]+)>/);
   if (oldFormatMatch) {
     const toolName = oldFormatMatch[1].replace(/_/g, '-');
-    return formatToolNameForDisplay(toolName);
+    // Only show if it's a known tool to avoid false positives
+    if (HIDE_STREAMING_XML_TAGS.has(toolName)) {
+      return formatToolNameForDisplay(toolName);
+    }
   }
   
   return null;
@@ -106,19 +111,29 @@ export function detectStreamingTag(streamingTextContent: string): { detectedTag:
   let tagStartIndex = -1;
   
   if (streamingTextContent) {
+    // Check for complete function_calls opening tag
     const functionCallsIndex = streamingTextContent.indexOf('<function_calls>');
     if (functionCallsIndex !== -1) {
       detectedTag = 'function_calls';
       tagStartIndex = functionCallsIndex;
     } else {
+      // Only detect complete opening tags to avoid partial matches
       for (const tag of HIDE_STREAMING_XML_TAGS) {
-        const openingTagPattern = `<${tag}`;
-        const index = streamingTextContent.indexOf(openingTagPattern);
+        const completeTagPattern = `<${tag}>`;
+        const index = streamingTextContent.indexOf(completeTagPattern);
         if (index !== -1) {
           detectedTag = tag;
           tagStartIndex = index;
           break;
         }
+      }
+      
+      // Also check for complete invoke patterns
+      const invokePattern = /<invoke\s+name=["'][^"']+["']>/;
+      const invokeMatch = streamingTextContent.match(invokePattern);
+      if (invokeMatch && invokeMatch.index !== undefined) {
+        detectedTag = 'function_calls';
+        tagStartIndex = invokeMatch.index;
       }
     }
   }

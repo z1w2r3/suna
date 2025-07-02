@@ -36,8 +36,24 @@ export default function HomeScreen() {
     );
     const newChatSession = useNewChatSession();
 
+    // Extract messages from both sessions
+    const newChatMessages = newChatSession.messages;
+    const projectMessages = projectChatSession.messages;
+
     // Select the right session based on mode
     const { messages } = isNewChatMode ? newChatSession : projectChatSession;
+
+    // Simple fallback for tools panel - use newChatMessages OR messages
+    const newchatmessages = (newChatMessages && newChatMessages.length > 0) ? newChatMessages : messages;
+
+    // Basic logging to see which message state we have
+    console.log('=== MESSAGE STATE DEBUG ===');
+    console.log('isNewChatMode:', isNewChatMode);
+    console.log('newChatMessages length:', newChatMessages?.length || 0);
+    console.log('projectMessages length:', projectMessages?.length || 0);
+    console.log('selected messages length:', messages?.length || 0);
+    console.log('fallback newchatmessages length:', newchatmessages?.length || 0);
+    console.log('=============================');
 
     const toggleLeftPanel = () => setLeftPanelVisible(!leftPanelVisible);
     const toggleRightPanel = () => setRightPanelVisible(!rightPanelVisible);
@@ -88,7 +104,7 @@ export default function HomeScreen() {
                 }}
                 onCloseRight={() => setRightPanelVisible(false)}
                 onOpenLeft={() => setLeftPanelVisible(true)}
-                messages={messages}
+                messages={newchatmessages}
             >
                 <View style={styles.header}>
                     <ChatHeader

@@ -44,6 +44,33 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, onLongPress, o
         [parsedMessage.cleanContent, message.metadata?.cached_files]
     );
 
+    // Extract ask tool content and attachments
+    const askToolContent = useMemo(() => {
+        if (!parsedMessage.hasTools) return null;
+
+        const askTools = parsedMessage.toolCalls.filter(tool => tool.functionName === 'ask');
+        if (askTools.length === 0) return null;
+
+        // Handle the first ask tool (there should typically be only one)
+        const askTool = askTools[0];
+        const text = askTool.parameters?.text || '';
+        const attachments = askTool.parameters?.attachments || '';
+
+        // Parse attachments (could be comma-separated)
+        const attachmentList = attachments ? attachments.split(',').map((a: string) => a.trim()).filter(Boolean) : [];
+
+        return {
+            text,
+            attachments: attachmentList
+        };
+    }, [parsedMessage.toolCalls, parsedMessage.hasTools]);
+
+    // Filter out ask tools from regular tool rendering
+    const nonAskToolCalls = useMemo(() => {
+        if (!parsedMessage.hasTools) return [];
+        return parsedMessage.toolCalls.filter(tool => tool.functionName !== 'ask');
+    }, [parsedMessage.toolCalls, parsedMessage.hasTools]);
+
     const handleLongPress = () => {
         if (messageRef.current) {
             messageRef.current.measure((x, y, width, height, pageX, pageY) => {
@@ -111,9 +138,30 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, onLongPress, o
                     />
                 )}
 
-                {parsedMessage.hasTools && (
+                {/* Ask tool content */}
+                {askToolContent && (
+                    <>
+                        {askToolContent.text && (
+                            <Markdown style={[styles.markdownContent]}>
+                                {askToolContent.text}
+                            </Markdown>
+                        )}
+
+                        {askToolContent.attachments.length > 0 && (
+                            <AttachmentGroup
+                                attachments={askToolContent.attachments}
+                                onFilePress={handleFilePress}
+                                layout="grid"
+                                showPreviews={true}
+                                sandboxId={sandboxId}
+                            />
+                        )}
+                    </>
+                )}
+
+                {nonAskToolCalls.length > 0 && (
                     <ToolCallRenderer
-                        toolCalls={parsedMessage.toolCalls}
+                        toolCalls={nonAskToolCalls}
                         onToolPress={(toolCall) => {
                             onToolPress?.(toolCall, message.message_id);
                         }}
@@ -168,6 +216,38 @@ const ThinkingText = memo<{ children: string; color: string }>(({ children, colo
 
 ThinkingText.displayName = 'ThinkingText';
 
+// Shimmer effect for tool name
+const ShimmerText = memo<{ children: string; color: string }>(({ children, color }) => {
+    const shimmerPosition = useSharedValue(-1);
+
+    useEffect(() => {
+        shimmerPosition.value = withRepeat(
+            withTiming(1, { duration: 1500 }),
+            -1,
+            false
+        );
+    }, [shimmerPosition]);
+
+    const animatedStyle = useAnimatedStyle(() => {
+        const inputRange = [-1, 0, 1];
+        const outputRange = [0.4, 1, 0.4];
+
+        return {
+            opacity: shimmerPosition.value >= -0.5 && shimmerPosition.value <= 0.5 ? 1 : 0.7,
+        };
+    });
+
+    return (
+        <Animated.View style={animatedStyle}>
+            <Body style={[styles.toolIndicatorText, { color }]}>
+                {children}
+            </Body>
+        </Animated.View>
+    );
+});
+
+ShimmerText.displayName = 'ShimmerText';
+
 export const MessageThread: React.FC<MessageThreadProps> = ({
     messages,
     isGenerating = false,
@@ -194,12 +274,13 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     const [sourceLayout, setSourceLayout] = useState<{ x: number; y: number; width: number; height: number } | undefined>();
 
 
-
     // EXACT FRONTEND PATTERN - Simple message display
     const displayMessages = useMemo(() => {
         // Simple reverse for inverted list - no complex logic
         return messages.slice().reverse();
     }, [messages]);
+
+
 
     // EXACT FRONTEND PATTERN - Show streaming content as text
     const showStreamingText = isGenerating && streamContent;
@@ -233,8 +314,12 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
     }, [keyboardHeight]);
 
     const handleScroll = useCallback((event: any) => {
-        const { contentOffset } = event.nativeEvent;
-        const isScrolledToBottom = contentOffset.y <= 50;
+        const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+
+        // For inverted FlatList, we're at bottom when offset is near 0
+        // But also check if content fits in container (no scrolling needed)
+        const contentFitsInContainer = contentSize.height <= layoutMeasurement.height;
+        const isScrolledToBottom = contentOffset.y <= 20 || contentFitsInContainer;
 
         if (isScrolledToBottom !== isAtBottom) {
             setIsAtBottom(isScrolledToBottom);
@@ -315,11 +400,16 @@ export const MessageThread: React.FC<MessageThreadProps> = ({
                         </Markdown>
                     )}
 
-                    {isStreamingTool && currentToolName && (
+                    {isStreamingTool && currentToolName && currentToolName.length > 2 && !currentToolName.includes('<') && (
                         <View style={styles.toolIndicatorContainer}>
-                            <Body style={[styles.toolIndicatorText, { color: theme.mutedForeground }]}>
-                                🔧 {currentToolName}
-                            </Body>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Body style={[styles.toolIndicatorText, { color: theme.mutedForeground }]}>
+                                    🔧{' '}
+                                </Body>
+                                <ShimmerText color={theme.mutedForeground}>
+                                    {currentToolName}
+                                </ShimmerText>
+                            </View>
                         </View>
                     )}
 
@@ -497,5 +587,6 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontStyle: 'italic',
         opacity: 0.8,
+
     },
 });
