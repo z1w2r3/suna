@@ -90,8 +90,6 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, onLongPress, o
     const isUser = message.type === 'user';
 
     if (isUser) {
-        const bubbleColor = theme.messageBubble;
-
         return (
             <View style={[styles.messageContainer, { alignSelf: 'flex-end' }]}>
                 <TouchableOpacity
@@ -100,7 +98,10 @@ const MessageItem = memo<MessageItemProps>(({ message, sandboxId, onLongPress, o
                     delayLongPress={500}
                     activeOpacity={0.8}
                 >
-                    <Animated.View style={[styles.messageBubble, { backgroundColor: bubbleColor }]}>
+                    <Animated.View style={[styles.messageBubble, {
+                        backgroundColor: theme.card,
+                        borderColor: theme.border,
+                    }]}>
                         <Body style={[styles.messageText, { color: theme.userMessage }]}>
                             {cleanContent}
                         </Body>
@@ -508,12 +509,15 @@ const styles = StyleSheet.create({
     },
     messageContainer: {
         marginVertical: 4,
-        maxWidth: '80%',
+        maxWidth: '85%',
     },
     messageBubble: {
         paddingHorizontal: 16,
         paddingVertical: 12,
-        borderRadius: 16,
+        borderRadius: 24,
+        borderBottomRightRadius: 8,
+        borderWidth: 1,
+        overflow: 'hidden',
         ...commonStyles.shadow,
     },
     messageText: {
