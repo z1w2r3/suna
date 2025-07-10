@@ -15,7 +15,7 @@ import {
     useToolViewState,
     useUpdateToolSnapshots
 } from '@/stores/ui-store';
-import { GenericToolView } from './ToolViews/GenericToolView';
+import { ToolView } from './ToolViews/ToolViewRegistry';
 import { Body, Caption, H4 } from './Typography';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -24,9 +24,10 @@ interface RightPanelProps {
     isVisible: boolean;
     onClose: () => void;
     messages?: Message[];
+    sandboxId?: string;
 }
 
-export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, messages = [] }) => {
+export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, messages = [], sandboxId }) => {
     const insets = useSafeAreaInsets();
     const theme = useTheme();
     const toolViewState = useToolViewState();
@@ -283,7 +284,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
                         <Computer size={16} color={styles.title.color} />
-                        <H4 style={styles.title}>Suna's Computer</H4>
+                        <H4 style={styles.title}>Suna&apos;s Computer</H4>
                     </View>
                     <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
                         <X size={16} color={styles.title.color} />
@@ -296,7 +297,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
                     </View>
                     <Body style={styles.emptyTitle}>No tool activity</Body>
                     <Body style={styles.emptySubtitle}>
-                        Tool calls and computer interactions will appear here when they're being executed.
+                        Tool calls and computer interactions will appear here when they&apos;re being executed.
                     </Body>
                 </View>
             </View>
@@ -307,8 +308,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
         <View style={styles.panel}>
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
-                    <Computer size={16} color={styles.title.color} />
-                    <H4 style={styles.title}>Suna's Computer</H4>
+                    <H4 style={styles.title}>Suna&apos;s Computer</H4>
                 </View>
 
                 <View style={styles.headerActions}>
@@ -330,10 +330,13 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
             >
-                <GenericToolView
+                <ToolView
+                    name={currentSnapshot?.toolCall?.functionName}
                     toolCall={currentSnapshot?.toolCall}
                     isStreaming={isGenerating}
                     isSuccess={true}
+                    sandboxId={sandboxId}
+                    messages={messages}
                 />
             </ScrollView>
 

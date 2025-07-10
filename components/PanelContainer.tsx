@@ -1,5 +1,6 @@
 import { Message } from '@/api/chat-api';
 import { useThemedStyles } from '@/hooks/useThemeColor';
+import { useSelectedProject } from '@/stores/ui-store';
 import React, { useRef } from 'react';
 import { Dimensions, View } from 'react-native';
 import { DrawerLayout } from 'react-native-gesture-handler';
@@ -29,6 +30,7 @@ export const PanelContainer: React.FC<PanelContainerProps> = ({
 }) => {
     const leftDrawerRef = useRef<DrawerLayout>(null);
     const rightDrawerRef = useRef<DrawerLayout>(null);
+    const selectedProject = useSelectedProject();
 
     const styles = useThemedStyles((theme) => ({
         container: {
@@ -65,7 +67,12 @@ export const PanelContainer: React.FC<PanelContainerProps> = ({
     );
 
     const rightDrawerContent = (
-        <RightPanel isVisible={true} onClose={onCloseRight} messages={messages} />
+        <RightPanel
+            isVisible={true}
+            onClose={onCloseRight}
+            messages={messages}
+            sandboxId={selectedProject?.sandbox?.id}
+        />
     );
 
     const mainContent = (

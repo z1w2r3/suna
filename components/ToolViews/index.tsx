@@ -3,6 +3,7 @@ import { ParsedToolCall } from '@/utils/message-parser';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Body, Caption } from '../Typography';
+import { AskToolView } from './AskToolView';
 
 // Generic tool view for unknown tools
 export const GenericToolView: React.FC<{ toolCall: ParsedToolCall }> = ({ toolCall }) => {
@@ -197,6 +198,11 @@ export const WebSearchToolView: React.FC<{ toolCall: ParsedToolCall }> = ({ tool
     );
 };
 
+// Ask tool view wrapper to match the registry interface
+const AskToolViewWrapper: React.FC<{ toolCall: ParsedToolCall }> = ({ toolCall }) => {
+    return <AskToolView toolCall={toolCall} />;
+};
+
 // Tool registry - maps tool names to their view components
 export const TOOL_VIEW_REGISTRY: Record<string, React.FC<{ toolCall: ParsedToolCall }>> = {
     'create-file': FileToolView,
@@ -206,6 +212,7 @@ export const TOOL_VIEW_REGISTRY: Record<string, React.FC<{ toolCall: ParsedToolC
     'execute-command': CommandToolView,
     'web-search': WebSearchToolView,
     'crawl-webpage': WebSearchToolView,
+    'ask': AskToolViewWrapper,
 };
 
 // Main tool view component that uses the registry
