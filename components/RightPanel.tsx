@@ -304,6 +304,8 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
         );
     }
 
+
+
     return (
         <View style={styles.panel}>
             <View style={styles.header}>
@@ -330,15 +332,26 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
             >
-                <ToolView
-                    name={currentSnapshot?.toolCall?.functionName}
-                    toolCall={currentSnapshot?.toolCall}
-                    isStreaming={isGenerating}
-                    isSuccess={true}
-                    sandboxId={sandboxId}
-                    messages={messages}
-                    toolTimestamp={currentSnapshot?.timestamp ? new Date(currentSnapshot.timestamp).toISOString() : undefined}
-                />
+                {(() => {
+                    console.log('📤 PASSING TO TOOL VIEW:', currentSnapshot?.toolCall?.functionName, 'HAS RESULT:', !!currentSnapshot?.toolResult);
+                    if (currentSnapshot?.toolResult) {
+                        console.log('📦 RAW TOOL CONTENT:', currentSnapshot.toolResult.substring(0, 200) + '...');
+                    }
+                    return (
+                        <ToolView
+                            name={currentSnapshot?.toolCall?.functionName}
+                            toolCall={currentSnapshot?.toolCall}
+                            isStreaming={isGenerating}
+                            isSuccess={true}
+                            sandboxId={sandboxId}
+                            messages={messages}
+                            assistantContent={currentSnapshot?.toolResult}
+                            toolContent={currentSnapshot?.toolResult}
+                            browserState={currentSnapshot?.browserState}
+                            toolTimestamp={currentSnapshot?.timestamp ? new Date(currentSnapshot.timestamp).toISOString() : undefined}
+                        />
+                    );
+                })()}
             </ScrollView>
 
             {/* Timeline controls at bottom */}

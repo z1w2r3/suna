@@ -4,25 +4,6 @@ import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'rea
 import { Colors } from '../../constants/Colors';
 import { useColorScheme } from '../../hooks/useColorScheme';
 import { CodeRenderer, CsvRenderer, HtmlRenderer, MarkdownRenderer } from '../renderers';
-import {
-    extractFileContent,
-    extractFilePath,
-    extractStreamingFileContent,
-    extractToolData,
-    formatTimestamp,
-    getFileExtension,
-    getFileIcon,
-    getFileName,
-    getLanguageFromFileName,
-    getOperationConfigs,
-    getOperationType,
-    getToolTitle,
-    hasLanguageHighlighting,
-    isFileType,
-    processFilePath,
-    processUnicodeContent,
-    splitContentIntoLines
-} from '../renderers/file-operation-utils';
 import { ToolViewProps } from './ToolViewRegistry';
 
 interface FileOperationToolViewProps extends ToolViewProps {
@@ -33,102 +14,252 @@ interface FileOperationToolViewProps extends ToolViewProps {
     project?: any;
 }
 
+const getOperationConfigs = () => ({
+    create: {
+        icon: 'add-circle' as const,
+        color: '#22c55e',
+        bgColor: '#dcfce7',
+        progressMessage: 'Creating file...'
+    },
+    edit: {
+        icon: 'create' as const,
+        color: '#3b82f6',
+        bgColor: '#dbeafe',
+        progressMessage: 'Editing file...'
+    },
+    delete: {
+        icon: 'trash' as const,
+        color: '#ef4444',
+        bgColor: '#fee2e2',
+        progressMessage: 'Deleting file...'
+    },
+    read: {
+        icon: 'document-text' as const,
+        color: '#8b5cf6',
+        bgColor: '#f3e8ff',
+        progressMessage: 'Reading file...'
+    }
+});
+
+const getFileExtension = (filename: string) => {
+    const lastDot = filename.lastIndexOf('.');
+    return lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : '';
+};
+
+const getLanguageFromFileName = (filename: string) => {
+    const ext = getFileExtension(filename);
+    const langMap: { [key: string]: string } = {
+        'js': 'javascript',
+        'jsx': 'javascript',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'py': 'python',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c': 'c',
+        'cs': 'csharp',
+        'php': 'php',
+        'rb': 'ruby',
+        'go': 'go',
+        'rs': 'rust',
+        'swift': 'swift',
+        'kt': 'kotlin',
+        'dart': 'dart',
+        'html': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'sass': 'sass',
+        'less': 'less',
+        'json': 'json',
+        'xml': 'xml',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'toml': 'toml',
+        'md': 'markdown',
+        'sql': 'sql',
+        'sh': 'bash',
+        'bash': 'bash',
+        'zsh': 'zsh',
+        'fish': 'fish'
+    };
+    return langMap[ext] || 'text';
+};
+
+const isFileType = {
+    markdown: (ext: string) => ['md', 'markdown'].includes(ext),
+    html: (ext: string) => ['html', 'htm'].includes(ext),
+    csv: (ext: string) => ['csv'].includes(ext),
+    code: (ext: string) => ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'cpp', 'c', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'dart'].includes(ext),
+    data: (ext: string) => ['json', 'xml', 'yaml', 'yml', 'toml'].includes(ext)
+};
+
+const getFileIcon = (filename: string) => {
+    const ext = getFileExtension(filename);
+
+    if (isFileType.markdown(ext)) return 'reader';
+    if (isFileType.html(ext)) return 'globe';
+    if (isFileType.csv(ext)) return 'grid';
+    if (isFileType.code(ext)) return 'code-slash';
+    if (isFileType.data(ext)) return 'document-text';
+
+    return 'document-text';
+};
+
+const extractFileOperationData = (toolCall?: any, toolContent?: string) => {
+    let filePath = '';
+    let fileContent = '';
+    let operation = 'edit';
+    let isSuccess = true;
+    let errorMessage = '';
+
+    // Extract from tool call parameters
+    if (toolCall?.parameters) {
+        filePath = toolCall.parameters.target_file ||
+            toolCall.parameters.file_path ||
+            toolCall.parameters.path ||
+            toolCall.parameters.filename || '';
+
+        fileContent = toolCall.parameters.code_edit ||
+            toolCall.parameters.content ||
+            toolCall.parameters.file_content ||
+            toolCall.parameters.file_contents || '';
+
+        // Determine operation from tool name
+        const toolName = toolCall.name || '';
+        if (toolName.includes('create') || toolName.includes('new')) {
+            operation = 'create';
+        } else if (toolName.includes('delete') || toolName.includes('remove')) {
+            operation = 'delete';
+        } else if (toolName.includes('read') || toolName.includes('view')) {
+            operation = 'read';
+        }
+    }
+
+    // Parse tool content if available
+    if (toolContent) {
+        try {
+            const parsed = JSON.parse(toolContent);
+
+            if (parsed.tool_execution) {
+                const toolExecution = parsed.tool_execution;
+
+                // Determine operation from XML tag name
+                const xmlTagName = toolExecution.xml_tag_name || '';
+                if (xmlTagName.includes('create')) {
+                    operation = 'create';
+                } else if (xmlTagName.includes('delete')) {
+                    operation = 'delete';
+                } else if (xmlTagName.includes('read')) {
+                    operation = 'read';
+                } else if (xmlTagName.includes('replace') || xmlTagName.includes('rewrite')) {
+                    operation = 'edit';
+                }
+
+                // Extract arguments
+                if (toolExecution.arguments) {
+                    filePath = toolExecution.arguments.target_file ||
+                        toolExecution.arguments.file_path ||
+                        toolExecution.arguments.path ||
+                        toolExecution.arguments.filename || filePath;
+
+                    fileContent = toolExecution.arguments.code_edit ||
+                        toolExecution.arguments.content ||
+                        toolExecution.arguments.file_content ||
+                        toolExecution.arguments.file_contents || fileContent;
+                }
+
+                // Extract result
+                if (toolExecution.result) {
+                    const result = toolExecution.result;
+
+                    if (result.success !== undefined) {
+                        isSuccess = result.success;
+                    }
+
+                    if (result.error) {
+                        errorMessage = result.error;
+                    }
+
+                    // For read operations, content might be in result
+                    if (operation === 'read' && result.content) {
+                        fileContent = result.content;
+                    }
+                }
+            }
+        } catch (e) {
+            // If parsing fails, treat as raw content
+            if (operation === 'read') {
+                fileContent = toolContent;
+            }
+        }
+    }
+
+    return {
+        filePath,
+        fileContent,
+        operation,
+        isSuccess,
+        errorMessage
+    };
+};
+
 export function FileOperationToolView({
     name,
     toolCall,
+    toolContent,
     isStreaming = false,
     isSuccess = true,
-    assistantContent,
-    toolContent,
-    assistantTimestamp,
-    toolTimestamp,
-    project,
     ...props
 }: FileOperationToolViewProps) {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const theme = Colors[colorScheme ?? 'light'];
-
-
     const [currentView, setCurrentView] = useState<'preview' | 'source'>('preview');
 
-    const operation = getOperationType(name, assistantContent);
+    console.log('📁 FILE OPERATION TOOL RECEIVED:', !!toolContent, toolContent?.length || 0);
+
+    if (!toolContent && !isStreaming) {
+        console.log('❌ FILE OPERATION TOOL: NO CONTENT');
+        return (
+            <View style={{
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: 20,
+                backgroundColor: theme.background,
+            }}>
+                <Text style={{
+                    color: theme.foreground,
+                    fontSize: 16,
+                    textAlign: 'center',
+                    opacity: 0.7
+                }}>
+                    No file operation data available
+                </Text>
+            </View>
+        );
+    }
+
+    const {
+        filePath,
+        fileContent,
+        operation,
+        isSuccess: actualIsSuccess,
+        errorMessage
+    } = extractFileOperationData(toolCall, toolContent);
+
     const configs = getOperationConfigs();
-    const config = configs[operation];
+    const config = configs[operation as keyof typeof configs] || configs.edit;
     const IconComponent = config.icon;
 
-    let filePath: string | null = null;
-    let fileContent: string | null = null;
-
-    // Extract data from both assistant and tool content
-    const assistantToolData = extractToolData(assistantContent || '');
-    const toolToolData = extractToolData(toolContent || '');
-
-    if (assistantToolData.toolResult) {
-        filePath = assistantToolData.filePath;
-        fileContent = assistantToolData.fileContent;
-    } else if (toolToolData.toolResult) {
-        filePath = toolToolData.filePath;
-        fileContent = toolToolData.fileContent;
-    }
-
-    // Fallback: try to extract from toolCall if available
-    if (!filePath && !fileContent && toolCall) {
-
-        // Try different possible property names for file path
-        filePath = toolCall.file_path ||
-            toolCall.path ||
-            toolCall.target_file ||
-            toolCall.filename ||
-            toolCall.parameters?.file_path ||
-            toolCall.parameters?.path ||
-            toolCall.parameters?.target_file ||
-            toolCall.parameters?.filename;
-
-        // Try different possible property names for file content
-        fileContent = toolCall.content ||
-            toolCall.file_content ||
-            toolCall.file_contents ||
-            toolCall.code_edit ||
-            toolCall.parameters?.content ||
-            toolCall.parameters?.file_content ||
-            toolCall.parameters?.file_contents ||
-            toolCall.parameters?.code_edit;
-    }
-
-    if (!filePath) {
-        filePath = extractFilePath(assistantContent || '');
-    }
-
-    if (!fileContent && operation !== 'delete') {
-        fileContent = isStreaming
-            ? extractStreamingFileContent(
-                assistantContent || '',
-                operation === 'create' ? 'create-file' : 'full-file-rewrite',
-            ) || ''
-            : extractFileContent(
-                assistantContent || '',
-                operation === 'create' ? 'create-file' : 'full-file-rewrite',
-            );
-    }
-
-    const toolTitle = getToolTitle(name || `file-${operation}`);
-    const processedFilePath = processFilePath(filePath);
-    const fileName = getFileName(processedFilePath);
+    const fileName = filePath.split('/').pop() || '';
     const fileExtension = getFileExtension(fileName);
+    const language = getLanguageFromFileName(fileName);
+    const FileIcon = getFileIcon(fileName);
 
     const isMarkdown = isFileType.markdown(fileExtension);
     const isHtml = isFileType.html(fileExtension);
     const isCsv = isFileType.csv(fileExtension);
-    const isCode = isFileType.code(fileExtension) || isFileType.data(fileExtension);
-
-    const language = getLanguageFromFileName(fileName);
-    const hasHighlighting = hasLanguageHighlighting(language);
-    const contentLines = splitContentIntoLines(fileContent);
-
-    const FileIcon = getFileIcon(fileName);
-
-
 
     const renderHeader = () => (
         <View style={{
@@ -165,16 +296,16 @@ export function FileOperationToolView({
                             fontWeight: '600',
                             color: theme.foreground
                         }}>
-                            {toolTitle}
+                            {operation.charAt(0).toUpperCase() + operation.slice(1)} File
                         </Text>
-                        {processedFilePath && (
+                        {filePath && (
                             <Text style={{
                                 fontSize: 12,
                                 color: theme.foreground,
                                 opacity: 0.7,
                                 fontFamily: 'monospace'
                             }}>
-                                {processedFilePath}
+                                {filePath}
                             </Text>
                         )}
                     </View>
@@ -241,6 +372,50 @@ export function FileOperationToolView({
         </View>
     );
 
+    const renderLoadingState = () => (
+        <View style={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: theme.background,
+            paddingHorizontal: 32,
+            paddingVertical: 48
+        }}>
+            <View style={{
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: config.bgColor,
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 24
+            }}>
+                <ActivityIndicator
+                    size="large"
+                    color={config.color}
+                />
+            </View>
+            <Text style={{
+                fontSize: 18,
+                fontWeight: '600',
+                color: theme.foreground,
+                textAlign: 'center',
+                marginBottom: 8
+            }}>
+                {config.progressMessage}
+            </Text>
+            <Text style={{
+                fontSize: 14,
+                color: theme.foreground,
+                opacity: 0.7,
+                textAlign: 'center',
+                fontFamily: 'monospace'
+            }}>
+                {filePath || 'Processing file...'}
+            </Text>
+        </View>
+    );
+
     const renderDeleteOperation = () => (
         <View style={{
             flex: 1,
@@ -289,7 +464,7 @@ export function FileOperationToolView({
                     fontFamily: 'monospace',
                     textAlign: 'center'
                 }}>
-                    {processedFilePath || 'Unknown file path'}
+                    {filePath || 'Unknown file path'}
                 </Text>
             </View>
             <Text style={{
@@ -300,50 +475,6 @@ export function FileOperationToolView({
                 marginTop: 16
             }}>
                 This file has been permanently removed
-            </Text>
-        </View>
-    );
-
-    const renderLoadingState = () => (
-        <View style={{
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            backgroundColor: theme.background,
-            paddingHorizontal: 32,
-            paddingVertical: 48
-        }}>
-            <View style={{
-                width: 80,
-                height: 80,
-                borderRadius: 40,
-                backgroundColor: config.bgColor,
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 24
-            }}>
-                <ActivityIndicator
-                    size="large"
-                    color={config.color}
-                />
-            </View>
-            <Text style={{
-                fontSize: 18,
-                fontWeight: '600',
-                color: theme.foreground,
-                textAlign: 'center',
-                marginBottom: 8
-            }}>
-                {config.progressMessage}
-            </Text>
-            <Text style={{
-                fontSize: 14,
-                color: theme.foreground,
-                opacity: 0.7,
-                textAlign: 'center',
-                fontFamily: 'monospace'
-            }}>
-                {processedFilePath || 'Processing file...'}
             </Text>
         </View>
     );
@@ -376,12 +507,10 @@ export function FileOperationToolView({
             );
         }
 
-        const processedContent = processUnicodeContent(fileContent);
-
         if (isMarkdown) {
             return (
                 <MarkdownRenderer
-                    content={processedContent}
+                    content={fileContent}
                     style={{ flex: 1 }}
                 />
             );
@@ -390,7 +519,7 @@ export function FileOperationToolView({
         if (isHtml) {
             return (
                 <HtmlRenderer
-                    content={processedContent}
+                    content={fileContent}
                     style={{ flex: 1 }}
                 />
             );
@@ -399,13 +528,12 @@ export function FileOperationToolView({
         if (isCsv) {
             return (
                 <CsvRenderer
-                    content={processedContent}
+                    content={fileContent}
                     style={{ flex: 1 }}
                 />
             );
         }
 
-        // Default text preview
         return (
             <ScrollView style={{ flex: 1 }}>
                 <View style={{
@@ -422,7 +550,7 @@ export function FileOperationToolView({
                         fontFamily: 'monospace',
                         lineHeight: 20
                     }}>
-                        {processedContent}
+                        {fileContent}
                     </Text>
                 </View>
             </ScrollView>
@@ -457,94 +585,15 @@ export function FileOperationToolView({
             );
         }
 
-        const processedContent = processUnicodeContent(fileContent);
-
         return (
             <CodeRenderer
-                content={processedContent}
+                content={fileContent}
                 language={language}
                 showLineNumbers={true}
                 style={{ flex: 1, margin: 16 }}
             />
         );
     };
-
-    const renderFooter = () => {
-        const timestamp = toolTimestamp || assistantTimestamp;
-        if (!timestamp) return null;
-
-        return (
-            <View style={{
-                backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-                borderTopWidth: 1,
-                borderTopColor: isDark ? '#404040' : '#e9ecef',
-                paddingHorizontal: 16,
-                paddingVertical: 8,
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-            }}>
-                <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: isDark ? '#404040' : '#e9ecef',
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                    borderRadius: 4
-                }}>
-                    <Ionicons
-                        name={FileIcon}
-                        size={12}
-                        color={theme.foreground}
-                        style={{ marginRight: 4 }}
-                    />
-                    <Text style={{
-                        fontSize: 10,
-                        color: theme.foreground,
-                        textTransform: 'uppercase',
-                        fontWeight: '600'
-                    }}>
-                        {hasHighlighting ? language : fileExtension || 'text'}
-                    </Text>
-                </View>
-                <Text style={{
-                    fontSize: 10,
-                    color: theme.foreground,
-                    opacity: 0.7
-                }}>
-                    {formatTimestamp(timestamp)}
-                </Text>
-            </View>
-        );
-    };
-
-    // Handle cases where there's no content
-    if (!isStreaming && !processedFilePath && !fileContent) {
-        return (
-            <View style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                backgroundColor: theme.background,
-                padding: 32
-            }}>
-                <Ionicons
-                    name="document-text"
-                    size={48}
-                    color={theme.foreground}
-                    style={{ marginBottom: 16, opacity: 0.5 }}
-                />
-                <Text style={{
-                    fontSize: 16,
-                    color: theme.foreground,
-                    opacity: 0.7,
-                    textAlign: 'center'
-                }}>
-                    No file operation data available
-                </Text>
-            </View>
-        );
-    }
 
     return (
         <View style={{
@@ -568,8 +617,6 @@ export function FileOperationToolView({
                     renderSource()
                 )}
             </View>
-
-            {renderFooter()}
 
             {isStreaming && fileContent && (
                 <View style={{

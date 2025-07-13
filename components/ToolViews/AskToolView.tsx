@@ -7,60 +7,49 @@ import { Body, Caption } from '../Typography';
 
 export interface AskToolViewProps {
     toolCall?: any;
+    toolContent?: string;
     isStreaming?: boolean;
     isSuccess?: boolean;
     onFilePress?: (filePath: string) => void;
     sandboxId?: string;
 }
 
-const extractAskData = (toolCall: any) => {
-    // Handle attachments - can be string, array, or object
-    let attachments: string[] = [];
-
-    const rawAttachments = toolCall?.parameters?.attachments ||
-        toolCall?.input?.attachments ||
-        toolCall?.arguments?.attachments ||
-        toolCall?.parameters?.files ||
-        toolCall?.input?.files ||
-        toolCall?.arguments?.files;
-
-    if (Array.isArray(rawAttachments)) {
-        // Handle array case - flat map to handle nested arrays and split comma-separated strings
-        attachments = rawAttachments.flatMap((item: any) => {
-            if (typeof item === 'string' && item.trim()) {
-                // Split comma-separated strings
-                return item.split(',').map(file => file.trim()).filter(file => file.length > 0);
-            }
-            return [];
-        });
-    } else if (typeof rawAttachments === 'string' && rawAttachments.trim()) {
-        // Handle single string case - split by comma in case multiple files are provided
-        attachments = rawAttachments.split(',').map(file => file.trim()).filter(file => file.length > 0);
-    } else if (rawAttachments && typeof rawAttachments === 'object') {
-        // Handle object case - extract values and process them
-        const values = Object.values(rawAttachments).filter(Boolean);
-        attachments = values.flatMap((item: any) => {
-            if (typeof item === 'string' && item.trim()) {
-                // Split comma-separated strings
-                return item.split(',').map(file => file.trim()).filter(file => file.length > 0);
-            }
-            return [];
-        });
+const extractAskData = (toolCall: any, toolContent?: string) => {
+    if (!toolContent) {
+        console.log('AskToolView: No content provided');
+        return { text: '', attachments: [] };
     }
 
-    // Remove duplicates and empty strings
-    attachments = [...new Set(attachments)].filter(attachment => attachment.length > 0);
+    try {
+        const parsedContent = JSON.parse(toolContent);
+        const args = parsedContent.tool_execution?.arguments || {};
 
-    const text = toolCall?.parameters?.text || toolCall?.input?.text || toolCall?.arguments?.text || '';
+        // Extract attachments/files
+        let attachments: string[] = [];
+        const rawAttachments = args.attachments || args.files || [];
 
-    return {
-        text,
-        attachments,
-    };
+        if (Array.isArray(rawAttachments)) {
+            attachments = rawAttachments.filter(item => typeof item === 'string' && item.trim());
+        } else if (typeof rawAttachments === 'string' && rawAttachments.trim()) {
+            // Handle comma-separated strings
+            attachments = rawAttachments.split(',').map(file => file.trim()).filter(file => file.length > 0);
+        }
+
+        const text = args.text || '';
+
+        return {
+            text,
+            attachments,
+        };
+    } catch (error) {
+        console.error('AskToolView: Error parsing tool content:', error);
+        return { text: '', attachments: [] };
+    }
 };
 
 export const AskToolView: React.FC<AskToolViewProps> = ({
     toolCall,
+    toolContent,
     isStreaming = false,
     isSuccess = true,
     onFilePress,
@@ -155,7 +144,7 @@ export const AskToolView: React.FC<AskToolViewProps> = ({
         );
     }
 
-    const { attachments } = extractAskData(toolCall);
+    const { attachments } = extractAskData(toolCall, toolContent);
 
     return (
         <View style={styles.container}>

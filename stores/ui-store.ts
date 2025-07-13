@@ -21,9 +21,11 @@ export interface ToolCallSnapshot {
   id: string;
   messageId: string;
   toolCall: any;
+  toolResult?: string; // Tool execution result content as JSON string
   index: number;
   timestamp: number;
   isCompleted: boolean;
+  browserState?: any; // New field for browser state data
 }
 
 export interface Project {
@@ -259,55 +261,105 @@ export const useUIStore = create<UIState>()(
     })),
     
     updateToolSnapshots: (messages) => set((state) => {
-      // Extract only tool-related messages
+      console.log('🔍 PARSING', messages.length, 'MESSAGES');
+      
       const toolSnapshots: ToolCallSnapshot[] = [];
       
-      messages.forEach((message, index) => {
-        if (message.type === 'assistant') {
+      // Mobile app stores tool execution info in tool results, not assistant messages
+      const toolResultMessages = messages.filter(msg => 
+          msg.type === 'tool' && msg.content
+      );
+      
+      // Get browser_state messages for screenshots
+      const browserStateMessages = messages.filter(msg => 
+          msg.type === 'browser_state' && msg.content
+      );
+      
+      console.log('🔍 TOOL RESULTS FOUND:', toolResultMessages.length);
+      console.log('🖼️ BROWSER STATES FOUND:', browserStateMessages.length);
+      
+      toolResultMessages.forEach((resultMsg, index) => {
+          let toolContent: any;
           try {
-            // Parse message to check for tools
-            const { parseMessage } = require('@/utils/message-parser');
-            const parsed = parseMessage(message);
-            
-            if (parsed.hasTools && parsed.toolCalls.length > 0) {
-              parsed.toolCalls.forEach((toolCall: any, toolIndex: number) => {
-                toolSnapshots.push({
-                  id: `${message.message_id}-${toolIndex}`,
-                  messageId: message.message_id,
-                  toolCall,
-                  index: toolSnapshots.length,
-                  timestamp: new Date(message.created_at).getTime(),
-                  isCompleted: true, // For now, assume completed
-                });
-              });
-            }
+              // Handle nested structure: msg.content.content is the actual JSON string
+              const outerContent = resultMsg.content;
+              if (outerContent && outerContent.content) {
+                  toolContent = JSON.parse(outerContent.content);
+              } else if (typeof resultMsg.content === 'string') {
+                  toolContent = JSON.parse(resultMsg.content);
+              } else {
+                  toolContent = resultMsg.content;
+              }
+              
+              const functionName = toolContent?.tool_execution?.function_name;
+              console.log('🔧 TOOL CONTENT:', functionName);
+              
+              if (functionName) {
+                  // Convert underscores to hyphens to match registry
+                  const registryName = functionName.replace(/_/g, '-');
+                  
+                  // For browser tools, find the closest browser_state message
+                  let browserStateData = null;
+                  if (functionName.includes('browser')) {
+                      // Find browser_state message closest to this tool result
+                      const toolTime = new Date(resultMsg.created_at || resultMsg.timestamp || 0).getTime();
+                      let closestBrowserState = null;
+                      let closestTimeDiff = Infinity;
+                      
+                      browserStateMessages.forEach(browserMsg => {
+                          const browserTime = new Date(browserMsg.created_at || browserMsg.timestamp || 0).getTime();
+                          const timeDiff = Math.abs(browserTime - toolTime);
+                          
+                          // Within 30 seconds of tool execution
+                          if (timeDiff < 30000 && timeDiff < closestTimeDiff) {
+                              closestBrowserState = browserMsg;
+                              closestTimeDiff = timeDiff;
+                          }
+                      });
+                      
+                      if (closestBrowserState) {
+                          browserStateData = (closestBrowserState as any).content;
+                          console.log('🖼️ BROWSER STATE MATCHED:', registryName, !!browserStateData?.screenshot_base64);
+                      }
+                  }
+                  
+                  const snapshot: ToolCallSnapshot = {
+                      id: `tool-${index}`,
+                      messageId: resultMsg.id || `tool-msg-${index}`,
+                      timestamp: resultMsg.timestamp || Date.now(),
+                      index: index,
+                      isCompleted: true,
+                      toolCall: {
+                          id: `tool-${index}`,
+                          name: registryName,
+                          functionName: registryName,
+                          arguments: toolContent.tool_execution?.arguments || {},
+                      },
+                      toolResult: JSON.stringify(toolContent),
+                      // Add browser state data if available
+                      browserState: browserStateData,
+                  };
+                  
+                  toolSnapshots.push(snapshot);
+                  console.log('✅ CREATED SNAPSHOT:', registryName);
+              }
           } catch (error) {
-            console.warn('Error parsing message for tools:', error);
+              console.log('❌ PARSE ERROR:', error);
           }
-        }
       });
+      
+      console.log('✅ FINAL SNAPSHOTS:', toolSnapshots.length, 'WITH RESULTS:', toolSnapshots.filter(s => s.toolResult).length);
       
       const newToolViewState = { ...state.toolViewState };
       newToolViewState.toolCallSnapshots = toolSnapshots;
       
-      // Only auto-select latest if no tool is currently selected AND not initialized
-      if (toolSnapshots.length > 0 && !newToolViewState.selectedToolCall && !newToolViewState.isInitialized) {
-        const latestIndex = toolSnapshots.length - 1;
-        newToolViewState.currentSnapshotIndex = latestIndex;
-        newToolViewState.navigationMode = 'live';
-        newToolViewState.selectedToolCall = toolSnapshots[latestIndex].toolCall;
-        newToolViewState.selectedMessageId = toolSnapshots[latestIndex].messageId;
-        newToolViewState.isInitialized = true;
-      } else if (newToolViewState.selectedToolCall) {
-        // If user has selected a tool, find its new index in updated snapshots
-        const selectedToolIndex = toolSnapshots.findIndex(snapshot => 
-          snapshot.messageId === newToolViewState.selectedMessageId &&
-          JSON.stringify(snapshot.toolCall) === JSON.stringify(newToolViewState.selectedToolCall)
-        );
-        
-        if (selectedToolIndex >= 0) {
-          newToolViewState.currentSnapshotIndex = selectedToolIndex;
-        }
+      if (toolSnapshots.length > 0) {
+          const latestIndex = toolSnapshots.length - 1;
+          newToolViewState.currentSnapshotIndex = latestIndex;
+          newToolViewState.navigationMode = 'live';
+          newToolViewState.selectedToolCall = toolSnapshots[latestIndex].toolCall;
+          newToolViewState.selectedMessageId = toolSnapshots[latestIndex].messageId;
+          newToolViewState.isInitialized = true;
       }
       
       return { toolViewState: newToolViewState };

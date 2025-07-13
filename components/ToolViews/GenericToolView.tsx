@@ -1,19 +1,83 @@
 import { useTheme } from '@/hooks/useThemeColor';
-import { formatToolNameForDisplay } from '@/utils/xml-parser';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Body, Caption, H4 } from '../Typography';
+import { ToolViewProps } from './ToolViewRegistry';
 
-export interface GenericToolViewProps {
-    toolCall?: any;
-    isStreaming?: boolean;
-    isSuccess?: boolean;
+interface GenericToolViewProps extends ToolViewProps {
+    toolContent?: string;
+    assistantContent?: string;
+    assistantTimestamp?: string;
+    toolTimestamp?: string;
 }
+
+const extractGenericToolData = (toolCall?: any, toolContent?: string) => {
+    let functionName = '';
+    let parameters: any = {};
+    let result: any = null;
+    let isSuccess = true;
+    let errorMessage = '';
+
+    // Extract from tool call parameters
+    if (toolCall?.parameters) {
+        parameters = toolCall.parameters;
+        functionName = toolCall.functionName || toolCall.name || '';
+    }
+
+    // Parse tool content if available
+    if (toolContent) {
+        try {
+            const parsed = JSON.parse(toolContent);
+
+            if (parsed.tool_execution) {
+                const toolExecution = parsed.tool_execution;
+
+                // Extract function name
+                functionName = toolExecution.function_name ||
+                    toolExecution.xml_tag_name ||
+                    functionName;
+
+                // Extract arguments
+                if (toolExecution.arguments) {
+                    parameters = { ...parameters, ...toolExecution.arguments };
+                }
+
+                // Extract result
+                if (toolExecution.result) {
+                    result = toolExecution.result;
+
+                    if (result.success !== undefined) {
+                        isSuccess = result.success;
+                    }
+
+                    if (result.error) {
+                        errorMessage = result.error;
+                    }
+                }
+            }
+        } catch (e) {
+            // If parsing fails, treat as raw result
+            result = toolContent;
+            isSuccess = false;
+            errorMessage = 'Failed to parse tool content';
+        }
+    }
+
+    return {
+        functionName,
+        parameters,
+        result,
+        isSuccess,
+        errorMessage
+    };
+};
 
 export const GenericToolView: React.FC<GenericToolViewProps> = ({
     toolCall,
+    toolContent,
     isStreaming = false,
-    isSuccess = true
+    isSuccess = true,
+    ...props
 }) => {
     const theme = useTheme();
 
@@ -71,38 +135,60 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
             fontFamily: 'monospace',
             fontSize: 13,
         },
+        resultContainer: {
+            backgroundColor: theme.card,
+            padding: 12,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: theme.border,
+        },
+        resultText: {
+            color: theme.foreground,
+            fontFamily: 'monospace',
+            fontSize: 13,
+        },
     });
 
-    if (!toolCall) {
+    console.log('🔧 GENERIC TOOL RECEIVED:', !!toolContent, toolContent?.length || 0);
+
+    if (!toolContent && !isStreaming && !toolCall) {
+        console.log('❌ GENERIC TOOL: NO CONTENT');
         return (
             <View style={[styles.container, { backgroundColor: theme.background }]}>
                 <View style={styles.emptyState}>
                     <Body style={[styles.emptyText, { color: theme.mutedForeground }]}>
-                        No tool selected
+                        No tool data available
                     </Body>
                 </View>
             </View>
         );
     }
 
-    const toolName = formatToolNameForDisplay(toolCall.functionName || 'Unknown Tool');
+    const {
+        functionName,
+        parameters,
+        result,
+        isSuccess: actualIsSuccess,
+        errorMessage
+    } = extractGenericToolData(toolCall, toolContent);
 
+    const displayName = functionName || 'Unknown Tool';
     const statusColor = isStreaming
         ? theme.accent
-        : isSuccess
+        : actualIsSuccess
             ? theme.primary
             : theme.destructive;
 
     const statusText = isStreaming
         ? 'Running...'
-        : isSuccess
+        : actualIsSuccess
             ? 'Completed'
             : 'Failed';
 
     return (
         <View style={[styles.container, { backgroundColor: theme.background }]}>
             <View style={styles.header}>
-                <H4 style={styles.toolName}>{toolName}</H4>
+                <H4 style={styles.toolName}>{displayName}</H4>
                 <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
                     <Caption style={[styles.statusText, { color: statusColor }]}>
                         {statusText}
@@ -110,10 +196,10 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
                 </View>
             </View>
 
-            {toolCall.parameters && Object.keys(toolCall.parameters).length > 0 && (
+            {parameters && Object.keys(parameters).length > 0 && (
                 <View style={styles.section}>
                     <Body style={styles.sectionTitle}>Parameters</Body>
-                    {Object.entries(toolCall.parameters).map(([key, value]) => (
+                    {Object.entries(parameters).map(([key, value]) => (
                         <View key={key} style={styles.parameterContainer}>
                             <Caption style={styles.parameterKey}>{key}</Caption>
                             <Body style={styles.parameterValue}>
@@ -121,6 +207,28 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
                             </Body>
                         </View>
                     ))}
+                </View>
+            )}
+
+            {result && (
+                <View style={styles.section}>
+                    <Body style={styles.sectionTitle}>Result</Body>
+                    <View style={styles.resultContainer}>
+                        <Body style={styles.resultText}>
+                            {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+                        </Body>
+                    </View>
+                </View>
+            )}
+
+            {errorMessage && (
+                <View style={styles.section}>
+                    <Body style={[styles.sectionTitle, { color: theme.destructive }]}>Error</Body>
+                    <View style={[styles.resultContainer, { borderColor: theme.destructive }]}>
+                        <Body style={[styles.resultText, { color: theme.destructive }]}>
+                            {errorMessage}
+                        </Body>
+                    </View>
                 </View>
             )}
         </View>

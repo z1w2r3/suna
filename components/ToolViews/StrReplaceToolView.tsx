@@ -18,177 +18,78 @@ interface DiffLine {
     lineNumber: number;
 }
 
-// Enhanced utility functions for extracting content from multiple sources
-const extractFilePath = (content: string, toolCall?: any): string | null => {
-    // First try toolCall parameters if available
+const extractStrReplaceData = (toolCall?: any, toolContent?: string) => {
+    let filePath = '';
+    let oldStr = '';
+    let newStr = '';
+    let isSuccess = true;
+    let errorMessage = '';
+
+    // Extract from tool call parameters
     if (toolCall?.parameters) {
-        const filePath = toolCall.parameters.file_path ||
+        filePath = toolCall.parameters.file_path ||
             toolCall.parameters.path ||
-            toolCall.parameters.target_file ||
-            toolCall.parameters.filename;
-        if (filePath) return filePath;
+            toolCall.parameters.target_file || '';
+
+        oldStr = toolCall.parameters.old_string ||
+            toolCall.parameters.old_str ||
+            toolCall.parameters.old || '';
+
+        newStr = toolCall.parameters.new_string ||
+            toolCall.parameters.new_str ||
+            toolCall.parameters.new || '';
     }
 
-    // Try rawXml if available
-    if (toolCall?.rawXml) {
-        const xmlPatterns = [
-            /<parameter name="file_path">([^<]+)<\/parameter>/i,
-            /<parameter name="path">([^<]+)<\/parameter>/i,
-            /<parameter name="target_file">([^<]+)<\/parameter>/i,
-        ];
+    // Parse tool content if available
+    if (toolContent) {
+        try {
+            const parsed = JSON.parse(toolContent);
 
-        for (const pattern of xmlPatterns) {
-            const match = toolCall.rawXml.match(pattern);
-            if (match) return match[1].trim();
-        }
-    }
+            if (parsed.tool_execution) {
+                const toolExecution = parsed.tool_execution;
 
-    // Try various regex patterns for content extraction
-    const patterns = [
-        /file_path[:\s]*["']([^"']+)["']/i,
-        /path[:\s]*["']([^"']+)["']/i,
-        /target_file[:\s]*["']([^"']+)["']/i,
-        /<parameter name="file_path">([^<]+)<\/parameter>/i,
-        /<parameter name="path">([^<]+)<\/parameter>/i,
-        /<parameter name="target_file">([^<]+)<\/parameter>/i,
-        /File:\s*([^\n]+)/i,
-        /File path:\s*([^\n]+)/i,
-    ];
+                // Extract arguments
+                if (toolExecution.arguments) {
+                    filePath = toolExecution.arguments.file_path ||
+                        toolExecution.arguments.path ||
+                        toolExecution.arguments.target_file || filePath;
 
-    for (const pattern of patterns) {
-        const match = content.match(pattern);
-        if (match) return match[1].trim();
-    }
+                    oldStr = toolExecution.arguments.old_string ||
+                        toolExecution.arguments.old_str ||
+                        toolExecution.arguments.old || oldStr;
 
-    return null;
-};
+                    newStr = toolExecution.arguments.new_string ||
+                        toolExecution.arguments.new_str ||
+                        toolExecution.arguments.new || newStr;
+                }
 
-const extractStrings = (content: string, toolCall?: any): { oldStr: string | null; newStr: string | null } => {
-    // First try toolCall parameters if available
-    if (toolCall?.parameters) {
-        const oldStr = toolCall.parameters.old_string ||
-            toolCall.parameters.old_str ||  // Added this line
-            toolCall.parameters.old ||
-            toolCall.parameters.search ||
-            toolCall.parameters.find;
-        const newStr = toolCall.parameters.new_string ||
-            toolCall.parameters.new_str ||  // Added this line
-            toolCall.parameters.new ||
-            toolCall.parameters.replace ||
-            toolCall.parameters.replacement;
+                // Extract result
+                if (toolExecution.result) {
+                    const result = toolExecution.result;
 
-        if (oldStr && newStr) {
-            return { oldStr, newStr };
-        }
-    }
+                    if (result.success !== undefined) {
+                        isSuccess = result.success;
+                    }
 
-    // Try rawXml if available
-    if (toolCall?.rawXml) {
-        const xmlOldMatch = toolCall.rawXml.match(/<parameter name="old_string">([^<]+)<\/parameter>/i) ||
-            toolCall.rawXml.match(/<parameter name="old_str">([^<]+)<\/parameter>/i);
-        const xmlNewMatch = toolCall.rawXml.match(/<parameter name="new_string">([^<]+)<\/parameter>/i) ||
-            toolCall.rawXml.match(/<parameter name="new_str">([^<]+)<\/parameter>/i);
-
-        if (xmlOldMatch && xmlNewMatch) {
-            return {
-                oldStr: xmlOldMatch[1].trim(),
-                newStr: xmlNewMatch[1].trim()
-            };
-        }
-    }
-
-    // Try XML parameter extraction from content
-    const xmlOldMatch = content.match(/<parameter name="old_string">([^<]+)<\/parameter>/i) ||
-        content.match(/<parameter name="old_str">([^<]+)<\/parameter>/i);
-    const xmlNewMatch = content.match(/<parameter name="new_string">([^<]+)<\/parameter>/i) ||
-        content.match(/<parameter name="new_str">([^<]+)<\/parameter>/i);
-
-    if (xmlOldMatch && xmlNewMatch) {
-        return {
-            oldStr: xmlOldMatch[1].trim(),
-            newStr: xmlNewMatch[1].trim()
-        };
-    }
-
-    // Try multiline XML parameter extraction
-    const xmlOldMultiMatch = content.match(/<parameter name="old_string">\s*```([^`]+)```\s*<\/parameter>/i) ||
-        content.match(/<parameter name="old_str">\s*```([^`]+)```\s*<\/parameter>/i);
-    const xmlNewMultiMatch = content.match(/<parameter name="new_string">\s*```([^`]+)```\s*<\/parameter>/i) ||
-        content.match(/<parameter name="new_str">\s*```([^`]+)```\s*<\/parameter>/i);
-
-    if (xmlOldMultiMatch && xmlNewMultiMatch) {
-        return {
-            oldStr: xmlOldMultiMatch[1].trim(),
-            newStr: xmlNewMultiMatch[1].trim()
-        };
-    }
-
-    // Try simple key-value patterns (including old_str/new_str)
-    const patterns = [
-        { old: /old_string[:\s]*["']([^"']+)["']/i, new: /new_string[:\s]*["']([^"']+)["']/i },
-        { old: /old_str[:\s]*["']([^"']+)["']/i, new: /new_str[:\s]*["']([^"']+)["']/i },
-        { old: /old[:\s]*["']([^"']+)["']/i, new: /new[:\s]*["']([^"']+)["']/i },
-        { old: /search[:\s]*["']([^"']+)["']/i, new: /replace[:\s]*["']([^"']+)["']/i },
-        { old: /find[:\s]*["']([^"']+)["']/i, new: /replacement[:\s]*["']([^"']+)["']/i },
-    ];
-
-    for (const pattern of patterns) {
-        const oldMatch = content.match(pattern.old);
-        const newMatch = content.match(pattern.new);
-        if (oldMatch && newMatch) {
-            return {
-                oldStr: oldMatch[1].trim(),
-                newStr: newMatch[1].trim()
-            };
-        }
-    }
-
-    // Try multiline code block patterns
-    const multilinePatterns = [
-        { old: /old_string[:\s]*```([^`]+)```/i, new: /new_string[:\s]*```([^`]+)```/i },
-        { old: /old_str[:\s]*```([^`]+)```/i, new: /new_str[:\s]*```([^`]+)```/i },
-        { old: /old[:\s]*```([^`]+)```/i, new: /new[:\s]*```([^`]+)```/i },
-        { old: /search[:\s]*```([^`]+)```/i, new: /replace[:\s]*```([^`]+)```/i },
-    ];
-
-    for (const pattern of multilinePatterns) {
-        const oldMatch = content.match(pattern.old);
-        const newMatch = content.match(pattern.new);
-        if (oldMatch && newMatch) {
-            return {
-                oldStr: oldMatch[1].trim(),
-                newStr: newMatch[1].trim()
-            };
-        }
-    }
-
-    // Try to extract from different sections
-    const sections = content.split(/\n\s*\n/);
-    let oldStr = null;
-    let newStr = null;
-
-    for (const section of sections) {
-        if (section.toLowerCase().includes('old') || section.toLowerCase().includes('search') || section.toLowerCase().includes('find')) {
-            const lines = section.split('\n');
-            for (const line of lines) {
-                if (line.trim() && !line.toLowerCase().includes('old') && !line.toLowerCase().includes('search')) {
-                    oldStr = line.trim();
-                    break;
+                    if (result.error) {
+                        errorMessage = result.error;
+                    }
                 }
             }
-        }
-        if (section.toLowerCase().includes('new') || section.toLowerCase().includes('replace') || section.toLowerCase().includes('replacement')) {
-            const lines = section.split('\n');
-            for (const line of lines) {
-                if (line.trim() && !line.toLowerCase().includes('new') && !line.toLowerCase().includes('replace')) {
-                    newStr = line.trim();
-                    break;
-                }
-            }
+        } catch (e) {
+            // If parsing fails, mark as error
+            isSuccess = false;
+            errorMessage = 'Failed to parse tool content';
         }
     }
 
-    return { oldStr, newStr };
+    return {
+        filePath,
+        oldStr,
+        newStr,
+        isSuccess,
+        errorMessage
+    };
 };
 
 const generateDiff = (oldStr: string, newStr: string): DiffLine[] => {
@@ -247,27 +148,44 @@ const generateDiff = (oldStr: string, newStr: string): DiffLine[] => {
 
 export function StrReplaceToolView({
     name = 'str-replace',
+    toolCall,
+    toolContent,
     isStreaming = false,
     isSuccess = true,
-    assistantContent = '',
-    toolContent = '',
-    toolCall,
     ...props
 }: StrReplaceToolViewProps) {
     const theme = useTheme();
-    // const [expanded, setExpanded] = useState(true);
 
+    console.log('🔄 STR REPLACE TOOL RECEIVED:', !!toolContent, toolContent?.length || 0);
 
-    // Extract data from content using enhanced functions
-    const filePath = extractFilePath(assistantContent, toolCall) ||
-        extractFilePath(toolContent, toolCall);
+    if (!toolContent && !isStreaming) {
+        console.log('❌ STR REPLACE TOOL: NO CONTENT');
+        return (
+            <View style={{
+                flex: 1,
+                justifyContent: 'center',
+                alignItems: 'center',
+                padding: 20,
+                backgroundColor: theme.background,
+            }}>
+                <Body style={{
+                    color: theme.mutedForeground,
+                    fontSize: 16,
+                    textAlign: 'center',
+                }}>
+                    No string replacement data available
+                </Body>
+            </View>
+        );
+    }
 
-    const assistantStrings = extractStrings(assistantContent, toolCall);
-    const toolStrings = extractStrings(toolContent, toolCall);
-
-    const oldStr = assistantStrings.oldStr || toolStrings.oldStr;
-    const newStr = assistantStrings.newStr || toolStrings.newStr;
-
+    const {
+        filePath,
+        oldStr,
+        newStr,
+        isSuccess: actualIsSuccess,
+        errorMessage
+    } = extractStrReplaceData(toolCall, toolContent);
 
     const diff = oldStr && newStr ? generateDiff(oldStr, newStr) : [];
     const stats = {
@@ -419,24 +337,6 @@ export function StrReplaceToolView({
             <Body style={styles.errorText}>
                 Could not extract the old string and new string from the content.
             </Body>
-
-            {/* Debug info for development */}
-            {__DEV__ && (
-                <View style={{ marginTop: 16, padding: 12, backgroundColor: theme.mutedWithOpacity(0.1), borderRadius: 8 }}>
-                    <Caption style={{ color: theme.mutedForeground, marginBottom: 8 }}>
-                        Debug Info:
-                    </Caption>
-                    <Caption style={{ color: theme.mutedForeground, fontFamily: 'monospace', fontSize: 10 }}>
-                        ToolCall: {toolCall ? JSON.stringify(toolCall, null, 2).substring(0, 200) + '...' : 'null'}
-                    </Caption>
-                    <Caption style={{ color: theme.mutedForeground, fontFamily: 'monospace', fontSize: 10 }}>
-                        Assistant Content: {assistantContent?.substring(0, 100) + '...' || 'null'}
-                    </Caption>
-                    <Caption style={{ color: theme.mutedForeground, fontFamily: 'monospace', fontSize: 10 }}>
-                        Tool Content: {toolContent?.substring(0, 100) + '...' || 'null'}
-                    </Caption>
-                </View>
-            )}
         </View>
     );
 

@@ -4,10 +4,19 @@ import { AskToolView } from './AskToolView';
 import { BrowserToolView } from './BrowserToolView';
 import { CommandToolView } from './CommandToolView';
 import { CompleteToolView } from './CompleteToolView';
+import { DataProviderEndpointsToolView } from './DataProviderEndpointsToolView';
+import { DeployToolView } from './DeployToolView';
+import { ExecuteDataProviderCallToolView } from './ExecuteDataProviderCallToolView';
+import { ExposePortToolView } from './ExposePortToolView';
 import { FileOperationToolView } from './FileOperationToolView';
 import { GenericToolView } from './GenericToolView';
+import { SeeImageToolView } from './SeeImageToolView';
 import { StrReplaceToolView } from './StrReplaceToolView';
+import { TerminateCommandToolView } from './TerminateCommandToolView';
 import { ToolHeader } from './ToolHeader';
+import { WebCrawlToolView } from './WebCrawlToolView';
+import { WebScrapeToolView } from './WebScrapeToolView';
+import { WebSearchToolView } from './WebSearchToolView';
 
 export interface ToolViewProps {
     name?: string;
@@ -17,6 +26,7 @@ export interface ToolViewProps {
     onFilePress?: (filePath: string) => void;
     sandboxId?: string;
     messages?: any[]; // Add messages prop for complete tool
+    browserState?: any; // Browser state data for browser tools
     // Future props can be added here
     [key: string]: any;
 }
@@ -50,6 +60,21 @@ const defaultRegistry: Record<string, ToolViewComponent> = {
     'read-file': FileOperationToolView,
     'str-replace': StrReplaceToolView,
     'execute-command': CommandToolView,
+    'terminate-command': TerminateCommandToolView,
+
+
+    'see-image': SeeImageToolView,
+
+    'expose-port': ExposePortToolView,
+    'get-data-provider-endpoints': DataProviderEndpointsToolView,
+    'execute-data-provider-call': ExecuteDataProviderCallToolView,
+
+
+
+    'web-search': WebSearchToolView,
+    'crawl-webpage': WebCrawlToolView,
+    'deploy': DeployToolView,
+    'scrape-webpage': WebScrapeToolView,
 
 };
 

@@ -1,5 +1,5 @@
 import { useTheme } from '@/hooks/useThemeColor';
-import { AlertTriangle, CheckCircle, Clock, Globe, Monitor } from 'lucide-react-native';
+import { AlertTriangle, Globe, Monitor } from 'lucide-react-native';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Caption } from '../Typography';
@@ -14,6 +14,7 @@ export interface BrowserToolViewProps extends ToolViewProps {
     agentStatus?: 'idle' | 'running';
     currentIndex?: number;
     totalCalls?: number;
+    browserState?: any;
 }
 
 // Type definitions for parsed JSON data
@@ -92,308 +93,32 @@ const extractBrowserOperation = (toolName: string | undefined): string => {
     return operations[toolName] || 'Browser Action';
 };
 
-const extractBrowserToolData = (
-    toolCall?: any,
-    assistantContent?: string,
-    toolContent?: string,
-    messages?: any[],
-    assistantTimestamp?: string,
-    toolTimestamp?: string
-) => {
-    let screenshotUrl: string | null = null;
-    let screenshotBase64: string | null = null;
-    let messageId: string | null = null;
-    let url: string | null = null;
-
-    // Extract URL from toolCall parameters first
-    if (toolCall?.parameters) {
-        url = toolCall.parameters.url || toolCall.parameters.target_url || null;
-    }
-
-    // Get the timestamp to scope the search to this tool call
-    const toolCallTimestamp = assistantTimestamp || toolTimestamp;
-    const toolCallTime = toolCallTimestamp ? new Date(toolCallTimestamp).getTime() : 0;
-
-    // Tools that don't produce browser state screenshots
-    const nonScreenshotTools = [
-        'browser-wait',
-        'browser-go-back',
-        'browser-send-keys',
-        'browser-switch-tab',
-        'browser-close-tab'
-    ];
-
-    const toolName = toolCall?.function_name || toolCall?.functionName || name;
-    const shouldSkipScreenshot = nonScreenshotTools.includes(toolName);
-
-
-    // MAIN SEARCH: Look for browser_state messages with screenshot data
-    if (messages && messages.length > 0 && !shouldSkipScreenshot) {
-        // Sort messages by created_at chronologically
-        const sortedMessages = [...messages].sort((a, b) => {
-            const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-            const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-            return timeA - timeB; // Chronological order
-        });
-
-        // Find browser_state messages and log them
-        const browserStates = sortedMessages.filter(m => m.type === 'browser_state');
-
-        browserStates.forEach((msg, i) => {
-            const msgTime = msg.created_at ? new Date(msg.created_at).getTime() : 0;
-            const hasScreenshot = msg.content?.screenshot_base64 || msg.content?.image_url;
-        });
-
-        // Find the browser_state message that's CLOSEST to this tool call timestamp
-        let closestBrowserState = null;
-        let closestTimeDiff = Infinity;
-
-        for (const message of sortedMessages) {
-            if (message.type === 'browser_state' && message.content) {
-                const messageTime = message.created_at ? new Date(message.created_at).getTime() : 0;
-                const timeDiff = Math.abs(messageTime - toolCallTime);
-
-                // Only consider browser_state messages that are VERY close to the tool call (within 10 seconds)
-                // This ensures we only match browser_state that's actually for this tool call
-                if (timeDiff < 10000 && timeDiff < closestTimeDiff) {
-                    const content = message.content as any;
-                    if (content.screenshot_base64 || content.image_url) {
-                        closestBrowserState = message;
-                        closestTimeDiff = timeDiff;
-                    }
-                }
-            }
-        }
-
-        if (closestBrowserState) {
-            const content = closestBrowserState.content as any;
-            if (content.screenshot_base64) {
-                screenshotBase64 = content.screenshot_base64;
-                messageId = closestBrowserState.message_id || null;
-                url = url || content.url || null;
-            } else if (content.image_url) {
-                screenshotUrl = content.image_url;
-                messageId = closestBrowserState.message_id || null;
-                url = url || content.url || null;
-            }
-        }
-
-
-
-        // If no browser_state found, try tool_execution results
-        if (!screenshotUrl && !screenshotBase64) {
-            for (const message of sortedMessages) {
-                if (message.type === 'tool' || message.type === 'system' || message.type === 'assistant') {
-                    const messageTime = message.created_at ? new Date(message.created_at).getTime() : 0;
-
-                    // Only consider messages created AFTER this tool call
-                    if (toolCallTime > 0 && messageTime <= toolCallTime) {
-                        continue;
-                    }
-
-                    try {
-                        let messageContent = message.content;
-
-                        // Handle string content
-                        if (typeof messageContent === 'string') {
-                            try {
-                                const parsed = JSON.parse(messageContent);
-                                if (parsed.tool_execution) {
-                                    const toolExecution = parsed.tool_execution;
-
-                                    // Check if this is a browser tool execution
-                                    if (toolExecution.function_name?.includes('browser') ||
-                                        toolExecution.xml_tag_name?.includes('browser')) {
-
-                                        // Extract screenshot data from result
-                                        const resultOutput = toolExecution.result?.output;
-                                        if (resultOutput) {
-                                            if (typeof resultOutput === 'object') {
-                                                screenshotUrl = resultOutput.image_url || null;
-                                                messageId = resultOutput.message_id || null;
-                                                url = url || resultOutput.url || null;
-                                            } else if (typeof resultOutput === 'string') {
-                                                try {
-                                                    const parsedOutput = JSON.parse(resultOutput);
-                                                    screenshotUrl = parsedOutput.image_url || null;
-                                                    messageId = parsedOutput.message_id || null;
-                                                    url = url || parsedOutput.url || null;
-                                                } catch (e) {
-                                                    // Ignore parse errors
-                                                }
-                                            }
-                                        }
-
-                                        if (screenshotUrl || messageId) {
-                                            break;
-                                        }
-                                    }
-                                }
-                            } catch (e) {
-                                // Ignore parse errors
-                            }
-                        }
-
-                        // Handle object content
-                        if (typeof messageContent === 'object' && messageContent !== null) {
-                            const content = messageContent as any;
-
-                            // Check nested content field
-                            if (content.content && typeof content.content === 'string') {
-                                try {
-                                    const nestedParsed = JSON.parse(content.content);
-                                    if (nestedParsed.tool_execution) {
-                                        const toolExecution = nestedParsed.tool_execution;
-
-                                        if (toolExecution.function_name?.includes('browser') ||
-                                            toolExecution.xml_tag_name?.includes('browser')) {
-
-                                            const resultOutput = toolExecution.result?.output;
-                                            if (resultOutput) {
-                                                if (typeof resultOutput === 'object') {
-                                                    screenshotUrl = resultOutput.image_url || null;
-                                                    messageId = resultOutput.message_id || null;
-                                                    url = url || resultOutput.url || null;
-                                                } else if (typeof resultOutput === 'string') {
-                                                    try {
-                                                        const parsedOutput = JSON.parse(resultOutput);
-                                                        screenshotUrl = parsedOutput.image_url || null;
-                                                        messageId = parsedOutput.message_id || null;
-                                                        url = url || parsedOutput.url || null;
-                                                    } catch (e) {
-                                                        // Ignore parse errors
-                                                    }
-                                                }
-                                            }
-
-                                            if (screenshotUrl || messageId) {
-                                                break;
-                                            }
-                                        }
-                                    }
-                                } catch (e) {
-                                    // Ignore parse errors
-                                }
-                            }
-
-                            // Check direct tool_execution in object
-                            if (content.tool_execution) {
-                                const toolExecution = content.tool_execution;
-
-                                if (toolExecution.function_name?.includes('browser') ||
-                                    toolExecution.xml_tag_name?.includes('browser')) {
-
-                                    const resultOutput = toolExecution.result?.output;
-                                    if (resultOutput) {
-                                        if (typeof resultOutput === 'object') {
-                                            screenshotUrl = resultOutput.image_url || null;
-                                            messageId = resultOutput.message_id || null;
-                                            url = url || resultOutput.url || null;
-                                        } else if (typeof resultOutput === 'string') {
-                                            try {
-                                                const parsedOutput = JSON.parse(resultOutput);
-                                                screenshotUrl = parsedOutput.image_url || null;
-                                                messageId = parsedOutput.message_id || null;
-                                                url = url || parsedOutput.url || null;
-                                            } catch (e) {
-                                                // Ignore parse errors
-                                            }
-                                        }
-                                    }
-
-                                    if (screenshotUrl || messageId) {
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        // Ignore errors
-                    }
-                }
-            }
-        }
-    } else if (shouldSkipScreenshot) {
-        console.log(`🚫 Skipping screenshot search for ${toolName} - tool doesn't produce browser state`);
-    }
-
-    // Try to find screenshot in browser state messages
-    if (!screenshotUrl && !screenshotBase64 && messageId && messages && messages.length > 0) {
-        const browserStateMessage = messages.find(
-            (msg) => msg.type === 'browser_state' && msg.message_id === messageId
-        );
-
-        if (browserStateMessage) {
-            const browserStateContent = safeJsonParse<BrowserStateContent>(browserStateMessage.content, {});
-            screenshotBase64 = browserStateContent?.screenshot_base64 || null;
-            screenshotUrl = browserStateContent?.image_url || null;
-        }
-    }
-
-    // Fallback: try legacy extraction from content
-    if (!screenshotUrl && !screenshotBase64 && !url) {
-        // Extract URL from assistant content
-        if (assistantContent && !url) {
-            url = extractBrowserUrl(assistantContent);
-        }
-
-        // Try to extract from ToolResult in content
-        const content = toolContent || assistantContent;
-        if (content) {
-            try {
-                const toolResultMatch = content.match(/ToolResult\([^)]*output='([\s\S]*?)'(?:\s*,|\s*\))/);
-                if (toolResultMatch) {
-                    const outputString = toolResultMatch[1];
-                    const cleanedOutput = outputString.replace(/\\n/g, '\n').replace(/\\"/g, '"');
-                    const outputJson = safeJsonParse<ToolResultData>(cleanedOutput, {});
-
-                    screenshotUrl = outputJson.image_url || null;
-                    messageId = outputJson.message_id || null;
-                    url = url || outputJson.url || null;
-                }
-            } catch (error) {
-                // Ignore errors
-            }
-        }
-    }
-
-    const result = { screenshotUrl, screenshotBase64, messageId, url };
-    return result;
-};
-
 export const BrowserToolView: React.FC<BrowserToolViewProps> = ({
     name = 'browser-operation',
-    assistantContent,
-    toolContent,
-    assistantTimestamp,
-    toolTimestamp,
-    isSuccess = true,
+    toolCall,
+    browserState,
     isStreaming = false,
     project,
     agentStatus = 'idle',
-    messages = [],
     currentIndex = 0,
     totalCalls = 1,
     ...props
 }) => {
+    console.log('🌐 BROWSER TOOL:', name, 'HAS BROWSER STATE:', !!browserState);
+
     const theme = useTheme();
     const [imageLoading, setImageLoading] = useState(true);
     const [imageError, setImageError] = useState(false);
 
-    // Extract data using MOBILE APP PATTERN
-    const { screenshotUrl, screenshotBase64, messageId, url } = extractBrowserToolData(
-        props.toolCall,
-        assistantContent,
-        toolContent,
-        messages,
-        assistantTimestamp,
-        toolTimestamp
-    );
-
     const operation = extractBrowserOperation(name);
-
     const isRunning = isStreaming || agentStatus === 'running';
-    const isLastToolCall = currentIndex === totalCalls - 1;
+
+    // Extract data from browserState prop (passed from ui-store)
+    const url = browserState?.url || toolCall?.arguments?.url;
+    const screenshotBase64 = browserState?.screenshot_base64;
+    const screenshotUrl = browserState?.image_url;
+
+    console.log('🖼️ BROWSER DATA:', { url, hasScreenshot: !!screenshotBase64, hasImageUrl: !!screenshotUrl });
 
     // VNC preview URL
     const vncPreviewUrl = useMemo(() => {
@@ -417,39 +142,6 @@ export const BrowserToolView: React.FC<BrowserToolViewProps> = ({
     const handleImageError = () => {
         setImageLoading(false);
         setImageError(true);
-    };
-
-    // Format timestamp for display
-    const formatTimestamp = (timestamp: string | undefined) => {
-        if (!timestamp) return '';
-        try {
-            const date = new Date(timestamp);
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } catch {
-            return '';
-        }
-    };
-
-    // Get status icon
-    const getStatusIcon = () => {
-        if (isRunning) {
-            return <Clock size={16} color={theme.mutedForeground} />;
-        } else if (isSuccess) {
-            return <CheckCircle size={16} color={theme.primary} />;
-        } else {
-            return <AlertTriangle size={16} color={theme.destructive} />;
-        }
-    };
-
-    // Get status color
-    const getStatusColor = () => {
-        if (isRunning) {
-            return theme.mutedForeground;
-        } else if (isSuccess) {
-            return theme.primary;
-        } else {
-            return theme.destructive;
-        }
     };
 
     const renderScreenshot = () => {
