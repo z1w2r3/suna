@@ -6,7 +6,7 @@ import { Body, Caption } from '../Typography';
 import { AskToolView } from './AskToolView';
 
 // Generic tool view for unknown tools
-export const GenericToolView: React.FC<{ toolCall: ParsedToolCall }> = ({ toolCall }) => {
+const GenericToolViewComponent: React.FC<{ toolCall: ParsedToolCall }> = ({ toolCall }) => {
     const theme = useTheme();
 
     const styles = StyleSheet.create({
@@ -198,25 +198,50 @@ export const WebSearchToolView: React.FC<{ toolCall: ParsedToolCall }> = ({ tool
     );
 };
 
-// Ask tool view wrapper to match the registry interface
+// Ask tool view wrapper
 const AskToolViewWrapper: React.FC<{ toolCall: ParsedToolCall }> = ({ toolCall }) => {
-    return <AskToolView toolCall={toolCall} />;
+    return (
+        <AskToolView
+            toolCall={toolCall}
+            isStreaming={false}
+            isSuccess={true}
+        />
+    );
 };
 
-// Tool registry - maps tool names to their view components
-export const TOOL_VIEW_REGISTRY: Record<string, React.FC<{ toolCall: ParsedToolCall }>> = {
-    'create-file': FileToolView,
-    'delete-file': FileToolView,
-    'str-replace': FileToolView,
-    'full-file-rewrite': FileToolView,
-    'execute-command': CommandToolView,
-    'web-search': WebSearchToolView,
-    'crawl-webpage': WebSearchToolView,
-    'ask': AskToolViewWrapper,
-};
-
-// Main tool view component that uses the registry
+// Main tool view component
 export const ToolView: React.FC<{ toolCall: ParsedToolCall }> = ({ toolCall }) => {
-    const ViewComponent = TOOL_VIEW_REGISTRY[toolCall.functionName] || GenericToolView;
-    return <ViewComponent toolCall={toolCall} />;
-}; 
+    const functionName = toolCall.functionName?.toLowerCase();
+
+    if (functionName === 'ask') {
+        return <AskToolViewWrapper toolCall={toolCall} />;
+    }
+
+    if (functionName?.includes('str-replace') || functionName?.includes('replace')) {
+        return <FileToolView toolCall={toolCall} />;
+    }
+
+    if (functionName?.includes('file') || functionName?.includes('read') || functionName?.includes('write') || functionName?.includes('edit')) {
+        return <FileToolView toolCall={toolCall} />;
+    }
+
+    if (functionName?.includes('command') || functionName?.includes('exec')) {
+        return <CommandToolView toolCall={toolCall} />;
+    }
+
+    if (functionName?.includes('search') || functionName?.includes('web')) {
+        return <WebSearchToolView toolCall={toolCall} />;
+    }
+
+    return <GenericToolViewComponent toolCall={toolCall} />;
+};
+
+// Export all components
+export { AskToolView } from './AskToolView';
+export { CommandToolView as CommandToolViewComponent } from './CommandToolView';
+export { FileOperationToolView } from './FileOperationToolView';
+export { GenericToolView } from './GenericToolView';
+export { StrReplaceToolView } from './StrReplaceToolView';
+export { ToolHeader } from './ToolHeader';
+export { toolViewRegistry } from './ToolViewRegistry';
+

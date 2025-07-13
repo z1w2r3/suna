@@ -1,8 +1,11 @@
 import React from 'react';
 import { View } from 'react-native';
 import { AskToolView } from './AskToolView';
+import { CommandToolView } from './CommandToolView';
 import { CompleteToolView } from './CompleteToolView';
+import { FileOperationToolView } from './FileOperationToolView';
 import { GenericToolView } from './GenericToolView';
+import { StrReplaceToolView } from './StrReplaceToolView';
 import { ToolHeader } from './ToolHeader';
 
 export interface ToolViewProps {
@@ -23,6 +26,15 @@ const defaultRegistry: Record<string, ToolViewComponent> = {
     'ask': AskToolView,
     'complete': CompleteToolView,
     'default': GenericToolView,
+
+    'create-file': FileOperationToolView,
+    'delete-file': FileOperationToolView,
+    'full-file-rewrite': FileOperationToolView,
+    'read-file': FileOperationToolView,
+    'str-replace': StrReplaceToolView,
+    'execute-command': CommandToolView,
+
+
 };
 
 class ToolViewRegistry {
