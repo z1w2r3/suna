@@ -26,37 +26,105 @@ const extractCompleteData = (toolCall: any, messages?: any[]): CompleteContent =
     let attachments: string[] = [];
     let tasksCompleted: string[] = [];
 
-    if (messages && toolCall) {
-        // Find the message that contains this tool call
-        const currentMessageIndex = messages.findIndex(msg =>
-            msg.message_id === toolCall.messageId ||
-            (msg.content && msg.content.includes && msg.content.includes(toolCall.functionName))
-        );
+    console.log('🔍 EXTRACT COMPLETE DATA - toolCall:', toolCall?.functionName || toolCall?.name);
+    console.log('🔍 EXTRACT COMPLETE DATA - messages count:', messages?.length || 0);
 
+    if (messages && messages.length > 0) {
+        // Find the message that contains this complete tool call
+        let currentMessageIndex = -1;
+
+        // Try different ways to find the current message
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+
+            // Check if this message contains the complete tool call
+            if (msg.content && typeof msg.content === 'string') {
+                if (msg.content.includes('<invoke name="complete"') ||
+                    msg.content.includes('"function_name":"complete"') ||
+                    msg.content.includes('complete')) {
+                    currentMessageIndex = i;
+                    break;
+                }
+            }
+        }
+
+        console.log('🔍 FOUND CURRENT MESSAGE INDEX:', currentMessageIndex);
+
+        // If we found the current message, get the previous one
         if (currentMessageIndex > 0) {
-            // Get the previous message (which contains the actual completion content)
             const previousMessage = messages[currentMessageIndex - 1];
+            console.log('🔍 PREVIOUS MESSAGE:', previousMessage?.type, typeof previousMessage?.content);
+            console.log('🔍 PREVIOUS MESSAGE CONTENT:', JSON.stringify(previousMessage?.content, null, 2));
 
-            if (previousMessage && previousMessage.type === 'assistant') {
+            // Handle different message types that might contain the content
+            if (previousMessage &&
+                (previousMessage.type === 'assistant' || previousMessage.type === 'assistant_response_end') &&
+                previousMessage.content) {
+
                 // Extract content from previous message
-                summary = previousMessage.content || '';
+                let extractedContent = '';
 
-                // Clean up function calls from the content
-                if (typeof summary === 'string') {
-                    summary = summary
-                        .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '')
-                        .replace(/<invoke name="complete"[\s\S]*?<\/invoke>/g, '')
-                        .trim();
+                if (typeof previousMessage.content === 'string') {
+                    extractedContent = previousMessage.content;
+                } else if (typeof previousMessage.content === 'object') {
+                    // Handle OpenAI/Claude API response structure
+                    if (previousMessage.content.choices && previousMessage.content.choices.length > 0) {
+                        // OpenAI/Claude API format: choices[0].message.content
+                        extractedContent = previousMessage.content.choices[0]?.message?.content || '';
+                    } else {
+                        // Try different object properties that might contain the content
+                        extractedContent = previousMessage.content.text ||
+                            previousMessage.content.content ||
+                            previousMessage.content.message ||
+                            previousMessage.content.body ||
+                            '';
+
+                        // If still empty, try to find any string property (but skip common metadata fields)
+                        if (!extractedContent) {
+                            for (const key in previousMessage.content) {
+                                if (typeof previousMessage.content[key] === 'string' &&
+                                    previousMessage.content[key].length > 10 &&
+                                    !['model', 'id', 'object', 'created', 'finish_reason', 'role'].includes(key)) {
+                                    extractedContent = previousMessage.content[key];
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
 
-                // Parse attachments from previous message if mentioned
-                const attachmentMatches = summary.match(/attachments?[=:]\s*["']([^"']+)["']/gi);
-                if (attachmentMatches) {
-                    attachments = attachmentMatches.flatMap(match => {
-                        const extracted = match.match(/["']([^"']+)["']/);
-                        return extracted ? extracted[1].split(',').map(f => f.trim()) : [];
-                    });
+                console.log('🔍 EXTRACTED CONTENT:', extractedContent.substring(0, 100));
+
+                if (extractedContent) {
+                    summary = String(extractedContent);
+
+                    // Clean up function calls from the content
+                    if (typeof summary === 'string') {
+                        summary = summary
+                            .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, '')
+                            .replace(/<invoke name="complete"[\s\S]*?<\/invoke>/g, '')
+                            .trim();
+                    }
+
+                    console.log('🔍 CLEANED SUMMARY:', summary.substring(0, 100));
                 }
+            }
+
+            // Parse attachments from previous message if mentioned
+            const attachmentMatches = summary.match(/attachments?[=:]\s*["']([^"']+)["']/gi);
+            if (attachmentMatches) {
+                attachments = attachmentMatches.flatMap(match => {
+                    const extracted = match.match(/["']([^"']+)["']/);
+                    return extracted ? extracted[1].split(',').map(f => f.trim()) : [];
+                });
+            }
+
+            // Parse tasks from summary if it contains bullet points
+            const taskMatches = summary.match(/[•\-\*]\s*([^\n]+)/g);
+            if (taskMatches) {
+                tasksCompleted = taskMatches.map((task: string) =>
+                    task.replace(/^[•\-\*]\s*/, '').trim()
+                );
             }
         }
     }
@@ -71,18 +139,14 @@ const extractCompleteData = (toolCall: any, messages?: any[]): CompleteContent =
             toolCall?.input?.message || '';
     }
 
-    // Parse tasks from summary if it contains bullet points
-    if (summary) {
-        const taskMatches = summary.match(/[•\-\*]\s*([^\n]+)/g);
-        if (taskMatches) {
-            tasksCompleted = taskMatches.map((task: string) =>
-                task.replace(/^[•\-\*]\s*/, '').trim()
-            );
-        }
-    }
-
     // Remove duplicates
     attachments = [...new Set(attachments)].filter(attachment => attachment.length > 0);
+
+    console.log('🔍 FINAL EXTRACTED DATA:', {
+        summary: summary.substring(0, 50),
+        attachments: attachments.length,
+        tasksCompleted: tasksCompleted.length
+    });
 
     return {
         summary: summary || '',
@@ -267,6 +331,8 @@ export const CompleteToolView: React.FC<CompleteToolViewProps> = ({
     const { summary, attachments, tasksCompleted } = extractCompleteData(toolCall, messages);
     const hasContent = summary || (attachments && attachments.length > 0) || (tasksCompleted && tasksCompleted.length > 0);
 
+    console.log('🔍 COMPLETE TOOL VIEW - hasContent:', hasContent);
+
     // Don't render if no meaningful content (prevents empty duplicate rendering)
     if (!hasContent && !isStreaming) {
         return (
@@ -289,9 +355,9 @@ export const CompleteToolView: React.FC<CompleteToolViewProps> = ({
 
     return (
         <View style={styles.container}>
-            <ScrollView style={styles.content}>
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 <View style={styles.section}>
-                    {/* Summary Section with Markdown */}
+                    {/* Summary Section */}
                     {summary && (
                         <View style={styles.summaryContainer}>
                             <MarkdownComponent>
@@ -300,7 +366,7 @@ export const CompleteToolView: React.FC<CompleteToolViewProps> = ({
                         </View>
                     )}
 
-                    {/* Tasks Completed Section with Markdown */}
+                    {/* Tasks Completed Section */}
                     {tasksCompleted && tasksCompleted.length > 0 && (
                         <View style={{ marginBottom: 16 }}>
                             <View style={styles.sectionHeader}>
