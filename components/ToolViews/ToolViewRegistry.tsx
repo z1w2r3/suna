@@ -1,6 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { AskToolView } from './AskToolView';
+import { BrowserToolView } from './BrowserToolView';
 import { CommandToolView } from './CommandToolView';
 import { CompleteToolView } from './CompleteToolView';
 import { FileOperationToolView } from './FileOperationToolView';
@@ -23,6 +24,22 @@ export interface ToolViewProps {
 export type ToolViewComponent = React.ComponentType<ToolViewProps>;
 
 const defaultRegistry: Record<string, ToolViewComponent> = {
+    'browser-navigate-to': BrowserToolView,
+    'browser-go-back': BrowserToolView,
+    'browser-wait': BrowserToolView,
+    'browser-click-element': BrowserToolView,
+    'browser-input-text': BrowserToolView,
+    'browser-send-keys': BrowserToolView,
+    'browser-switch-tab': BrowserToolView,
+    'browser-close-tab': BrowserToolView,
+    'browser-scroll-down': BrowserToolView,
+    'browser-scroll-up': BrowserToolView,
+    'browser-scroll-to-text': BrowserToolView,
+    'browser-get-dropdown-options': BrowserToolView,
+    'browser-select-dropdown-option': BrowserToolView,
+    'browser-drag-drop': BrowserToolView,
+    'browser-click-coordinates': BrowserToolView,
+
     'ask': AskToolView,
     'complete': CompleteToolView,
     'default': GenericToolView,
@@ -33,7 +50,6 @@ const defaultRegistry: Record<string, ToolViewComponent> = {
     'read-file': FileOperationToolView,
     'str-replace': StrReplaceToolView,
     'execute-command': CommandToolView,
-
 
 };
 

@@ -337,6 +337,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
                     isSuccess={true}
                     sandboxId={sandboxId}
                     messages={messages}
+                    toolTimestamp={currentSnapshot?.timestamp ? new Date(currentSnapshot.timestamp).toISOString() : undefined}
                 />
             </ScrollView>
 

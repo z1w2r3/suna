@@ -86,21 +86,9 @@ function extractCommandData(
 
     // NEW: Look for command results in messages array (mobile app pattern)
     if (!output && messages && toolCall) {
-        // Debug: Log ALL messages to understand the structure
-        console.log('CommandToolView: === FULL MESSAGE DUMP ===');
-        console.log('CommandToolView: Looking for command:', command);
-        console.log('CommandToolView: Total messages:', messages.length);
 
         messages.forEach((message, index) => {
-            console.log(`CommandToolView: Message ${index}:`, {
-                type: message.type,
-                contentType: typeof message.content,
-                hasMetadata: !!message.metadata,
-                fullContent: message.content,
-                fullMetadata: message.metadata,
-                created_at: message.created_at,
-                message_id: message.message_id
-            });
+
         });
 
         for (const message of messages) {
@@ -109,20 +97,13 @@ function extractCommandData(
                 try {
                     let messageContent = message.content;
 
-                    // Debug: Log message structure
-                    console.log('CommandToolView: Processing message:', {
-                        type: message.type,
-                        contentType: typeof messageContent,
-                        hasMetadata: !!message.metadata,
-                        fullContent: messageContent
-                    });
+
 
                     // Handle string content - check if it contains command output directly
                     if (typeof messageContent === 'string') {
                         // Check if this string contains command output directly
                         if (messageContent.includes('root@') || messageContent.includes('COMMAND_DONE') ||
                             messageContent.includes('total ') || messageContent.includes('drwx')) {
-                            console.log('CommandToolView: Found potential command output in string:', messageContent);
                             output = messageContent;
                             completed = true;
                             break;
@@ -130,11 +111,9 @@ function extractCommandData(
 
                         try {
                             const parsed = JSON.parse(messageContent);
-                            console.log('CommandToolView: Parsed JSON from string:', parsed);
 
                             if (parsed.tool_execution) {
                                 const toolExecution = parsed.tool_execution;
-                                console.log('CommandToolView: Found tool_execution:', toolExecution);
 
                                 // Check if this is the result for our command (ANY command tool)
                                 if (toolExecution.function_name === 'execute_command' ||
@@ -154,14 +133,12 @@ function extractCommandData(
                                         exitCode = toolExecution.result?.exit_code || null;
                                     }
                                     completed = true;
-                                    console.log('CommandToolView: Found result in string content:', { output: output?.substring(0, 200), exitCode });
                                     break;
                                 }
                             }
 
                             // Check for raw output in parsed JSON
                             if (parsed.output) {
-                                console.log('CommandToolView: Found raw output in parsed JSON:', parsed.output);
                                 output = parsed.output;
                                 completed = true;
                                 break;
@@ -174,11 +151,9 @@ function extractCommandData(
                     // Handle object content
                     if (typeof messageContent === 'object' && messageContent !== null) {
                         const content = messageContent as any;
-                        console.log('CommandToolView: Processing object content:', content);
 
                         // Check for direct output in content
                         if (content.output) {
-                            console.log('CommandToolView: Found direct output in object:', content.output);
                             output = content.output;
                             completed = true;
                             break;
@@ -186,15 +161,12 @@ function extractCommandData(
 
                         // Check nested content field
                         if (content.content && typeof content.content === 'string') {
-                            console.log('CommandToolView: Found nested content string:', content.content);
 
                             try {
                                 const nestedParsed = JSON.parse(content.content);
-                                console.log('CommandToolView: Parsed nested JSON:', nestedParsed);
 
                                 if (nestedParsed.tool_execution) {
                                     const toolExecution = nestedParsed.tool_execution;
-                                    console.log('CommandToolView: Found tool_execution in nested:', toolExecution);
 
                                     if (toolExecution.function_name?.includes('command') ||
                                         toolExecution.xml_tag_name?.includes('command')) {
@@ -209,7 +181,6 @@ function extractCommandData(
                                             exitCode = toolExecution.result?.exit_code || null;
                                         }
                                         completed = true;
-                                        console.log('CommandToolView: Found result in nested content:', { output: output?.substring(0, 200), exitCode });
                                         break;
                                     }
                                 }
@@ -220,7 +191,6 @@ function extractCommandData(
 
                         if (content.tool_execution) {
                             const toolExecution = content.tool_execution;
-                            console.log('CommandToolView: Found tool_execution in object:', toolExecution);
 
                             // Check if this is the result for our command (ANY command tool)
                             if (toolExecution.function_name === 'execute_command' ||
@@ -240,7 +210,6 @@ function extractCommandData(
                                     exitCode = toolExecution.result?.exit_code || null;
                                 }
                                 completed = true;
-                                console.log('CommandToolView: Found result in object content:', { output: output?.substring(0, 200), exitCode });
                                 break;
                             }
                         }
@@ -248,11 +217,9 @@ function extractCommandData(
 
                     // Check metadata for tool_execution
                     if (message.metadata) {
-                        console.log('CommandToolView: Checking metadata:', message.metadata);
 
                         if (message.metadata.tool_execution) {
                             const toolExecution = message.metadata.tool_execution;
-                            console.log('CommandToolView: Found tool_execution in metadata:', toolExecution);
 
                             if (toolExecution.function_name?.includes('command') ||
                                 toolExecution.xml_tag_name?.includes('command')) {
@@ -267,14 +234,12 @@ function extractCommandData(
                                     exitCode = toolExecution.result?.exit_code || null;
                                 }
                                 completed = true;
-                                console.log('CommandToolView: Found result in metadata:', { output: output?.substring(0, 200), exitCode });
                                 break;
                             }
                         }
 
                         // Check for other metadata fields that might contain output
                         if (message.metadata.output) {
-                            console.log('CommandToolView: Found output in metadata:', message.metadata.output);
                             output = message.metadata.output;
                             completed = true;
                             break;

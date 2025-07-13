@@ -49,14 +49,6 @@ export function FileOperationToolView({
     const isDark = colorScheme === 'dark';
     const theme = Colors[colorScheme ?? 'light'];
 
-    // Debug logging
-    console.log('FileOperationToolView props:', {
-        name,
-        toolCall,
-        assistantContent,
-        toolContent,
-        allProps: props
-    });
 
     const [currentView, setCurrentView] = useState<'preview' | 'source'>('preview');
 
@@ -82,7 +74,6 @@ export function FileOperationToolView({
 
     // Fallback: try to extract from toolCall if available
     if (!filePath && !fileContent && toolCall) {
-        console.log('Attempting to extract from toolCall:', toolCall);
 
         // Try different possible property names for file path
         filePath = toolCall.file_path ||
@@ -137,20 +128,7 @@ export function FileOperationToolView({
 
     const FileIcon = getFileIcon(fileName);
 
-    // Debug logging for extracted data
-    console.log('Extracted data:', {
-        operation,
-        filePath,
-        processedFilePath,
-        fileName,
-        fileExtension,
-        hasFileContent: !!fileContent,
-        contentLength: fileContent?.length || 0,
-        isMarkdown,
-        isHtml,
-        isCsv,
-        language
-    });
+
 
     const renderHeader = () => (
         <View style={{

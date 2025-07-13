@@ -257,14 +257,6 @@ export function StrReplaceToolView({
     const theme = useTheme();
     // const [expanded, setExpanded] = useState(true);
 
-    // Debug logging
-    console.log('StrReplaceToolView props:', {
-        name,
-        toolCall,
-        assistantContent: assistantContent?.substring(0, 200) + '...',
-        toolContent: toolContent?.substring(0, 200) + '...',
-        allProps: props
-    });
 
     // Extract data from content using enhanced functions
     const filePath = extractFilePath(assistantContent, toolCall) ||
@@ -276,16 +268,6 @@ export function StrReplaceToolView({
     const oldStr = assistantStrings.oldStr || toolStrings.oldStr;
     const newStr = assistantStrings.newStr || toolStrings.newStr;
 
-    // Debug logging for extracted data
-    console.log('StrReplaceToolView extracted data:', {
-        filePath,
-        oldStr: oldStr?.substring(0, 100) + '...',
-        newStr: newStr?.substring(0, 100) + '...',
-        hasOldStr: !!oldStr,
-        hasNewStr: !!newStr,
-        assistantStrings,
-        toolStrings
-    });
 
     const diff = oldStr && newStr ? generateDiff(oldStr, newStr) : [];
     const stats = {
