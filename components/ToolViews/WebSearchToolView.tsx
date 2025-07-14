@@ -1,7 +1,9 @@
 import { useTheme } from '@/hooks/useThemeColor';
 import { Globe, Image as ImageIcon, Search } from 'lucide-react-native';
 import React from 'react';
-import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Body, Caption } from '../Typography';
+import { Card, CardContent } from '../ui/Card';
 import { ToolViewProps } from './ToolViewRegistry';
 
 export interface WebSearchToolViewProps extends ToolViewProps {
@@ -113,25 +115,86 @@ export const WebSearchToolView: React.FC<WebSearchToolViewProps> = ({
 }) => {
     const theme = useTheme();
 
+    // Convert color-mix(in oklab, var(--muted) 20%, transparent) to hex
+    const mutedBg = theme.muted === '#e8e8e8' ? '#e8e8e833' : '#30303033';
+
+    // Link colors based on theme
+    const linkColor = theme.background === '#ffffff' ? '#155dfc' : '#51a2ff';
+
+    const styles = StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: theme.background,
+            padding: 16,
+        },
+        loadingContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 16,
+        },
+        emptyState: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 16,
+        },
+        section: {
+            marginBottom: 16,
+        },
+        sectionTitle: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 8,
+            gap: 8,
+        },
+        sectionTitleText: {
+            color: theme.foreground,
+            fontWeight: '600' as const,
+        },
+        imagesGrid: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        imageContainer: {
+            width: 100,
+            height: 100,
+            borderRadius: 12,
+            overflow: 'hidden',
+        },
+        imageStyle: {
+            width: '100%',
+            height: '100%',
+        },
+        resultTitle: {
+            color: linkColor,
+            marginBottom: 4,
+            fontWeight: '600' as const,
+        },
+        resultUrl: {
+            color: linkColor,
+            fontSize: 12,
+            marginBottom: 8,
+        },
+        resultSnippet: {
+            color: theme.foreground,
+            fontSize: 13,
+            lineHeight: 18,
+        },
+    });
+
     console.log('🔍 WEB SEARCH TOOL RECEIVED:', !!toolContent, toolContent?.length || 0);
 
     if (!toolContent && !isStreaming) {
         console.log('❌ WEB SEARCH TOOL: NO CONTENT');
         return (
-            <View style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                padding: 20,
-                backgroundColor: theme.background,
-            }}>
-                <Text style={{
-                    color: theme.mutedForeground,
-                    fontSize: 16,
-                    textAlign: 'center',
-                }}>
-                    No search data available
-                </Text>
+            <View style={styles.container}>
+                <View style={styles.emptyState}>
+                    <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                        No search data available
+                    </Body>
+                </View>
             </View>
         );
     }
@@ -145,102 +208,6 @@ export const WebSearchToolView: React.FC<WebSearchToolViewProps> = ({
         errorMessage
     } = extractWebSearchData(toolCall, toolContent);
 
-    const styles = StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: theme.background,
-        },
-        content: {
-            flex: 1,
-            padding: 16,
-        },
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 16,
-        },
-        loadingText: {
-            fontSize: 16,
-            color: theme.mutedForeground,
-            textAlign: 'center',
-        },
-        resultsHeader: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: theme.foreground,
-            marginBottom: 12,
-        },
-        resultItem: {
-            backgroundColor: theme.card,
-            borderRadius: 8,
-            padding: 16,
-            marginBottom: 12,
-            borderWidth: 1,
-            borderColor: theme.border,
-        },
-        resultTitle: {
-            fontSize: 16,
-            fontWeight: '600',
-            color: theme.secondary,
-            marginBottom: 8,
-        },
-        resultUrl: {
-            fontSize: 12,
-            color: theme.mutedForeground,
-            marginBottom: 8,
-        },
-        resultSnippet: {
-            fontSize: 14,
-            color: theme.foreground,
-            lineHeight: 20,
-        },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 16,
-        },
-        emptyText: {
-            fontSize: 16,
-            color: theme.mutedForeground,
-            textAlign: 'center',
-        },
-        imagesContainer: {
-            marginBottom: 16,
-        },
-        imagesTitle: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: theme.foreground,
-            marginBottom: 8,
-        },
-        imagesGrid: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 8,
-        },
-        imageItem: {
-            width: 100,
-            height: 100,
-            borderRadius: 8,
-            overflow: 'hidden',
-            borderWidth: 1,
-            borderColor: theme.border,
-        },
-        imageStyle: {
-            width: '100%',
-            height: '100%',
-        },
-        sectionTitle: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: theme.foreground,
-            marginBottom: 8,
-            marginTop: 16,
-        },
-    });
-
     const handleLinkPress = (url: string) => {
         Linking.openURL(url).catch(console.error);
     };
@@ -248,30 +215,44 @@ export const WebSearchToolView: React.FC<WebSearchToolViewProps> = ({
     const renderLoading = () => (
         <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.secondary} />
-            <Text style={styles.loadingText}>Searching the web...</Text>
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                Searching the web...
+            </Body>
         </View>
     );
 
     const renderResults = () => (
-        <ScrollView style={styles.content}>
+        <ScrollView style={{ flex: 1 }}>
             {images.length > 0 && (
-                <View style={styles.imagesContainer}>
-                    <Text style={styles.imagesTitle}>
-                        <ImageIcon size={16} color={theme.foreground} /> Images ({images.length})
-                    </Text>
+                <View style={styles.section}>
+                    <View style={styles.sectionTitle}>
+                        <ImageIcon size={16} color={theme.foreground} />
+                        <Body style={styles.sectionTitleText}>Images ({images.length})</Body>
+                    </View>
                     <View style={styles.imagesGrid}>
                         {images.slice(0, 6).map((imageUrl, index) => (
                             <TouchableOpacity
                                 key={index}
-                                style={styles.imageItem}
-                                onPress={() => handleLinkPress(imageUrl)}
                                 activeOpacity={0.7}
+                                onPress={() => handleLinkPress(imageUrl)}
                             >
-                                <Image
-                                    source={{ uri: imageUrl }}
-                                    style={styles.imageStyle}
-                                    resizeMode="cover"
-                                />
+                                <Card
+                                    style={{
+                                        ...styles.imageContainer,
+                                        backgroundColor: mutedBg,
+                                        borderColor: theme.muted,
+                                        borderRadius: 20,
+                                        padding: 0,
+                                    }}
+                                    bordered
+                                    elevated={false}
+                                >
+                                    <Image
+                                        source={{ uri: imageUrl }}
+                                        style={styles.imageStyle}
+                                        resizeMode="cover"
+                                    />
+                                </Card>
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -279,45 +260,60 @@ export const WebSearchToolView: React.FC<WebSearchToolViewProps> = ({
             )}
 
             {searchResults.length > 0 && (
-                <Text style={styles.sectionTitle}>
-                    <Globe size={16} color={theme.foreground} /> Search Results ({searchResults.length})
-                </Text>
+                <View style={styles.section}>
+                    <View style={styles.sectionTitle}>
+                        <Globe size={16} color={theme.foreground} />
+                        <Body style={styles.sectionTitleText}>Results ({searchResults.length})</Body>
+                    </View>
+                    {searchResults.map((result, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            activeOpacity={0.7}
+                            onPress={() => handleLinkPress(result.url)}
+                        >
+                            <Card
+                                style={{
+                                    backgroundColor: mutedBg,
+                                    borderColor: theme.muted,
+                                    marginBottom: 8,
+                                }}
+                                bordered
+                                elevated={false}
+                            >
+                                <CardContent style={{ padding: 0 }}>
+                                    <Body style={styles.resultTitle} numberOfLines={2}>
+                                        {result.title}
+                                    </Body>
+                                    <Caption style={styles.resultUrl} numberOfLines={1}>
+                                        {result.url}
+                                    </Caption>
+                                    {result.snippet && (
+                                        <Body style={styles.resultSnippet} numberOfLines={3}>
+                                            {result.snippet}
+                                        </Body>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </TouchableOpacity>
+                    ))}
+                </View>
             )}
-
-            {searchResults.map((result, index) => (
-                <TouchableOpacity
-                    key={index}
-                    style={styles.resultItem}
-                    onPress={() => handleLinkPress(result.url)}
-                    activeOpacity={0.7}
-                >
-                    <Text style={styles.resultTitle} numberOfLines={2}>
-                        {result.title}
-                    </Text>
-                    <Text style={styles.resultUrl} numberOfLines={1}>
-                        <Globe size={12} color={theme.mutedForeground} /> {result.url}
-                    </Text>
-                    {result.snippet && (
-                        <Text style={styles.resultSnippet} numberOfLines={3}>
-                            {result.snippet}
-                        </Text>
-                    )}
-                </TouchableOpacity>
-            ))}
         </ScrollView>
     );
 
     const renderEmpty = () => (
         <View style={styles.emptyState}>
             <Search size={48} color={theme.mutedForeground} />
-            <Text style={styles.emptyText}>No search results found</Text>
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                No search results found
+            </Body>
         </View>
     );
 
     return (
         <View style={styles.container}>
             {isStreaming ? renderLoading() :
-                searchResults.length > 0 ? renderResults() : renderEmpty()}
+                searchResults.length > 0 || images.length > 0 ? renderResults() : renderEmpty()}
         </View>
     );
 }; 

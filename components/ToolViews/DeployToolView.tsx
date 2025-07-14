@@ -1,17 +1,18 @@
 import { useTheme } from '@/hooks/useThemeColor';
-import * as Clipboard from 'expo-clipboard';
-import { CheckCircle, ExternalLink, Globe, Rocket, Terminal, XCircle } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { ExternalLink, Rocket, XCircle } from 'lucide-react-native';
+import React from 'react';
 import {
     ActivityIndicator,
     Alert,
     Linking,
     ScrollView,
     StyleSheet,
-    Text,
     TouchableOpacity,
     View
 } from 'react-native';
+import { Body, Caption } from '../Typography';
+import { Card, CardContent } from '../ui/Card';
+import { TerminalView } from '../ui/TerminalView';
 import { ToolViewProps } from './ToolViewRegistry';
 
 export interface DeployToolViewProps extends ToolViewProps {
@@ -109,25 +110,105 @@ export const DeployToolView: React.FC<DeployToolViewProps> = ({
 }) => {
     console.log('🚀 DEPLOY TOOL RECEIVED:', !!toolContent, toolContent?.length || 0);
     const theme = useTheme();
-    const [copiedUrl, setCopiedUrl] = useState(false);
+
+    // Convert color-mix(in oklab, var(--muted) 20%, transparent) to hex
+    const mutedBg = theme.muted === '#e8e8e8' ? '#e8e8e833' : '#30303033';
+
+    // Link colors based on theme
+    const linkColor = theme.background === '#ffffff' ? '#155dfc' : '#51a2ff';
+
+    const styles = StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: theme.background,
+            padding: 16,
+        },
+        loadingContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 16,
+        },
+        emptyState: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 16,
+        },
+        section: {
+            marginBottom: 16,
+        },
+        sectionTitle: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 8,
+            gap: 8,
+        },
+        sectionTitleText: {
+            color: theme.foreground,
+            fontWeight: '600' as const,
+        },
+        statusRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+        },
+        statusText: {
+            fontWeight: '600' as const,
+        },
+        successText: {
+            color: '#009966',
+        },
+        errorText: {
+            color: '#ef4444',
+        },
+        urlContainer: {
+            backgroundColor: theme.muted === '#e8e8e8' ? '#e8e8e820' : '#30303020',
+            padding: 12,
+            borderRadius: 16,
+            marginBottom: 12,
+        },
+        urlText: {
+            color: linkColor,
+            fontFamily: 'monospace',
+        },
+        actionButton: {
+            backgroundColor: '#009966',
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+        },
+        actionButtonText: {
+            color: '#ffffff',
+            fontWeight: '600' as const,
+        },
+        liveBadge: {
+            backgroundColor: '#009966',
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 12,
+            alignSelf: 'flex-start',
+        },
+        liveBadgeText: {
+            color: '#ffffff',
+            fontSize: 12,
+            fontWeight: '600' as const,
+        },
+    });
 
     if (!toolContent) {
         console.log('❌ DEPLOY TOOL: NO CONTENT');
         return (
-            <View style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                padding: 20,
-                backgroundColor: theme.background,
-            }}>
-                <Text style={{
-                    color: theme.mutedForeground,
-                    fontSize: 16,
-                    textAlign: 'center',
-                }}>
-                    No deployment data available
-                </Text>
+            <View style={styles.container}>
+                <View style={styles.emptyState}>
+                    <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                        No deployment data available
+                    </Body>
+                </View>
             </View>
         );
     }
@@ -139,20 +220,12 @@ export const DeployToolView: React.FC<DeployToolViewProps> = ({
     } catch (error) {
         console.log('❌ DEPLOY TOOL: PARSE ERROR', error);
         return (
-            <View style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                padding: 20,
-                backgroundColor: theme.background,
-            }}>
-                <Text style={{
-                    color: theme.destructive,
-                    fontSize: 16,
-                    textAlign: 'center',
-                }}>
-                    Failed to parse deployment data
-                </Text>
+            <View style={styles.container}>
+                <View style={styles.emptyState}>
+                    <Body style={{ color: theme.destructive, textAlign: 'center' }}>
+                        Failed to parse deployment data
+                    </Body>
+                </View>
             </View>
         );
     }
@@ -177,259 +250,102 @@ export const DeployToolView: React.FC<DeployToolViewProps> = ({
         deployOutput
     } = extractDeployData(toolCall, toolContent, assistantContent, messages);
 
-    const copyUrl = async (url: string) => {
-        try {
-            await Clipboard.setStringAsync(url);
-            setCopiedUrl(true);
-            setTimeout(() => setCopiedUrl(false), 2000);
-        } catch (error) {
-            Alert.alert('Error', 'Failed to copy URL to clipboard');
-        }
-    };
-
     const handleLinkPress = (url: string) => {
         Linking.openURL(url).catch(() => {
             Alert.alert('Error', 'Failed to open URL');
         });
     };
 
-    const styles = StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: theme.background,
-        },
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 20,
-        },
-        loadingContent: {
-            alignItems: 'center',
-            backgroundColor: theme.card,
-            padding: 24,
-            borderRadius: 12,
-            shadowColor: theme.shadowColor,
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-            elevation: 3,
-        },
-        loadingText: {
-            fontSize: 16,
-            fontWeight: '600',
-            color: theme.foreground,
-            marginTop: 12,
-        },
-        loadingSubtext: {
-            fontSize: 14,
-            color: theme.muted,
-            marginTop: 4,
-        },
-        scrollContainer: {
-            flex: 1,
-        },
-        content: {
-            padding: 16,
-        },
-        resultCard: {
-            backgroundColor: theme.card,
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-            shadowColor: theme.shadowColor,
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 4,
-            elevation: 3,
-        },
-        successCard: {
-            backgroundColor: theme.secondary + '10',
-            borderColor: theme.secondary + '30',
-            borderWidth: 1,
-        },
-        errorCard: {
-            backgroundColor: theme.destructive + '10',
-            borderColor: theme.destructive + '30',
-            borderWidth: 1,
-        },
-        statusRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            marginBottom: 12,
-        },
-        statusText: {
-            fontSize: 16,
-            fontWeight: '600',
-            marginLeft: 8,
-        },
-        successText: {
-            color: theme.secondary,
-        },
-        errorText: {
-            color: theme.destructive,
-        },
-        urlContainer: {
-            backgroundColor: theme.muted + '20',
-            padding: 12,
-            borderRadius: 8,
-            marginBottom: 12,
-        },
-        urlText: {
-            fontSize: 14,
-            color: theme.foreground,
-            fontFamily: 'monospace',
-        },
-        actionButton: {
-            backgroundColor: theme.primary,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderRadius: 8,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 8,
-        },
-        actionButtonText: {
-            color: theme.background,
-            fontSize: 14,
-            fontWeight: '600',
-            marginLeft: 8,
-        },
-        copyButton: {
-            backgroundColor: theme.secondary,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
-            borderRadius: 6,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        copyButtonText: {
-            color: theme.secondaryForeground,
-            fontSize: 12,
-            fontWeight: '500',
-            marginLeft: 6,
-        },
-        logSection: {
-            marginTop: 8,
-        },
-        logHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            marginBottom: 8,
-        },
-        logTitle: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: theme.foreground,
-            marginLeft: 8,
-        },
-        logContainer: {
-            backgroundColor: theme.muted + '20',
-            borderRadius: 8,
-            padding: 12,
-            maxHeight: 200,
-        },
-        logText: {
-            fontSize: 12,
-            color: theme.foreground,
-            fontFamily: 'monospace',
-            lineHeight: 16,
-        },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 20,
-        },
-        emptyText: {
-            fontSize: 16,
-            color: theme.muted,
-            textAlign: 'center',
-        },
-    });
-
     const renderLoading = () => (
         <View style={styles.loadingContainer}>
-            <View style={styles.loadingContent}>
-                <Rocket size={32} color={theme.primary} />
-                <ActivityIndicator size="large" color={theme.primary} style={{ marginTop: 12 }} />
-                <Text style={styles.loadingText}>Deploying Website</Text>
-                <Text style={styles.loadingSubtext}>
-                    {projectName || 'Processing deployment...'}
-                </Text>
-            </View>
+            <Rocket size={48} color={theme.secondary} />
+            <ActivityIndicator size="large" color={theme.secondary} />
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                Deploying Website
+            </Body>
+            <Caption style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                {projectName || 'Processing deployment...'}
+            </Caption>
         </View>
     );
 
     const renderResults = () => (
-        <ScrollView style={styles.scrollContainer}>
-            <View style={styles.content}>
-                {/* Success/Error Status */}
-                <View style={[styles.resultCard, actualIsSuccess ? styles.successCard : styles.errorCard]}>
-                    <View style={styles.statusRow}>
-                        {actualIsSuccess ? (
-                            <CheckCircle size={20} color={theme.secondary} />
-                        ) : (
-                            <XCircle size={20} color={theme.destructive} />
-                        )}
-                        <Text style={[styles.statusText, actualIsSuccess ? styles.successText : styles.errorText]}>
-                            {statusMessage || (actualIsSuccess ? 'Deployment Successful' : 'Deployment Failed')}
-                        </Text>
-                    </View>
-
-                    {/* Deploy URL */}
-                    {deployUrl && (
-                        <>
-                            <View style={styles.urlContainer}>
-                                <Text style={styles.urlText}>{deployUrl}</Text>
-                            </View>
-
-                            <TouchableOpacity
-                                style={styles.actionButton}
-                                onPress={() => handleLinkPress(deployUrl)}
-                            >
-                                <ExternalLink size={16} color={theme.background} />
-                                <Text style={styles.actionButtonText}>Open Website</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.copyButton}
-                                onPress={() => copyUrl(deployUrl)}
-                            >
-                                {copiedUrl ? (
-                                    <CheckCircle size={14} color={theme.secondary} />
-                                ) : (
-                                    <Globe size={14} color={theme.secondaryForeground} />
-                                )}
-                                <Text style={styles.copyButtonText}>
-                                    {copiedUrl ? 'Copied!' : 'Copy URL'}
-                                </Text>
-                            </TouchableOpacity>
-                        </>
-                    )}
-
-                    {/* Deploy Output/Log */}
-                    {deployOutput && (
-                        <View style={styles.logSection}>
-                            <View style={styles.logHeader}>
-                                <Terminal size={16} color={theme.foreground} />
-                                <Text style={styles.logTitle}>Deployment Log</Text>
-                            </View>
-                            <ScrollView style={styles.logContainer} nestedScrollEnabled>
-                                <Text style={styles.logText}>{deployOutput}</Text>
-                            </ScrollView>
+        <ScrollView style={{ flex: 1 }}>
+            {/* Deployment Status */}
+            <View style={styles.section}>
+                <View style={styles.sectionTitle}>
+                    <Rocket size={16} color={theme.foreground} />
+                    <Body style={styles.sectionTitleText}>Deployment Status</Body>
+                    {actualIsSuccess && (
+                        <View style={styles.liveBadge}>
+                            <Body style={styles.liveBadgeText}>Live</Body>
                         </View>
                     )}
                 </View>
+                <Card
+                    style={{
+                        backgroundColor: actualIsSuccess ? mutedBg : '#ef444420',
+                        borderColor: actualIsSuccess ? theme.muted : '#ef4444',
+                        padding: actualIsSuccess ? 12 : 24,
+                    }}
+                    bordered
+                    elevated={false}
+                >
+                    <CardContent style={{ padding: 0 }}>
+                        <View style={styles.statusRow}>
+                            {actualIsSuccess ? (
+                                <></>
+                            ) : (
+                                <>
+                                    <XCircle size={20} color="#ef4444" />
+                                    <Body style={[styles.statusText, styles.errorText]}>
+                                        {statusMessage || 'Deployment Failed'}
+                                    </Body>
+                                </>
+                            )}
+                        </View>
+
+                        {/* Deploy URL */}
+                        {deployUrl && (
+                            <>
+                                <View style={styles.urlContainer}>
+                                    <Body style={styles.urlText}>{deployUrl}</Body>
+                                </View>
+
+                                <TouchableOpacity
+                                    style={styles.actionButton}
+                                    onPress={() => handleLinkPress(deployUrl)}
+                                    activeOpacity={0.7}
+                                >
+                                    <ExternalLink size={16} color="#ffffff" />
+                                    <Body style={styles.actionButtonText}>Open Website</Body>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </CardContent>
+                </Card>
             </View>
+
+            {/* Deployment Logs */}
+            {deployOutput && (
+                <View style={styles.section}>
+                    <TerminalView
+                        output={deployOutput}
+                        title="Deployment Log"
+                        exitCode={actualIsSuccess ? 0 : 1}
+                        showError={false}
+                    />
+                </View>
+            )}
         </ScrollView>
     );
 
     const renderEmpty = () => (
         <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>No deployment results available</Text>
+            <Rocket size={48} color={theme.mutedForeground} />
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                No deployment results available
+            </Body>
         </View>
     );
 

@@ -14,6 +14,7 @@ import { SeeImageToolView } from './SeeImageToolView';
 import { StrReplaceToolView } from './StrReplaceToolView';
 import { TerminateCommandToolView } from './TerminateCommandToolView';
 import { ToolHeader } from './ToolHeader';
+import { ToolViewProvider } from './ToolViewContext';
 import { WebCrawlToolView } from './WebCrawlToolView';
 import { WebScrapeToolView } from './WebScrapeToolView';
 import { WebSearchToolView } from './WebSearchToolView';
@@ -104,13 +105,15 @@ export function ToolView({ name = 'default', ...props }: ToolViewProps) {
     const ToolViewComponent = toolViewRegistry.get(name);
 
     return (
-        <View style={{ flex: 1 }}>
-            <ToolHeader
-                toolName={name}
-                isStreaming={props.isStreaming}
-                isSuccess={props.isSuccess}
-            />
-            <ToolViewComponent name={name} {...props} />
-        </View>
+        <ToolViewProvider>
+            <View style={{ flex: 1 }}>
+                <ToolHeader
+                    toolName={name}
+                    isStreaming={props.isStreaming}
+                    isSuccess={props.isSuccess}
+                />
+                <ToolViewComponent name={name} {...props} />
+            </View>
+        </ToolViewProvider>
     );
 } 

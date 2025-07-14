@@ -1,10 +1,8 @@
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTheme } from '@/hooks/useThemeColor';
 import {
     AlertTriangle,
     Briefcase,
     CheckCircle,
-    ChevronRight,
     Database,
     Home,
     MessageCircle,
@@ -12,7 +10,9 @@ import {
     TrendingUp,
     Users
 } from 'lucide-react-native';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Body, Caption } from '../Typography';
+import { Card, CardContent } from '../ui/Card';
 import { ToolViewProps } from './ToolViewRegistry';
 
 interface DataProviderEndpointsToolViewProps extends ToolViewProps {
@@ -28,43 +28,31 @@ const PROVIDER_CONFIG = {
         name: 'LinkedIn Data Provider',
         icon: Users,
         color: '#0077B5',
-        bgColor: { dark: '#1e3a8a20', light: '#dbeafe' },
-        textColor: { dark: '#60a5fa', light: '#1d4ed8' }
     },
     'twitter': {
         name: 'Twitter Data Provider',
         icon: MessageCircle,
         color: '#1DA1F2',
-        bgColor: { dark: '#0c4a6e20', light: '#e0f2fe' },
-        textColor: { dark: '#7dd3fc', light: '#0369a1' }
     },
     'zillow': {
         name: 'Zillow Data Provider',
         icon: Home,
         color: '#10B981',
-        bgColor: { dark: '#064e3b20', light: '#dcfce7' },
-        textColor: { dark: '#6ee7b7', light: '#059669' }
     },
     'amazon': {
         name: 'Amazon Data Provider',
         icon: ShoppingBag,
         color: '#F59E0B',
-        bgColor: { dark: '#92400e20', light: '#fef3c7' },
-        textColor: { dark: '#fbbf24', light: '#d97706' }
     },
     'yahoo_finance': {
         name: 'Yahoo Finance Data Provider',
         icon: TrendingUp,
         color: '#8B5CF6',
-        bgColor: { dark: '#581c8720', light: '#f3e8ff' },
-        textColor: { dark: '#c084fc', light: '#7c3aed' }
     },
     'active_jobs': {
         name: 'Active Jobs Data Provider',
         icon: Briefcase,
         color: '#6366F1',
-        bgColor: { dark: '#3730a320', light: '#e0e7ff' },
-        textColor: { dark: '#a5b4fc', light: '#4f46e5' }
     }
 };
 
@@ -146,7 +134,9 @@ export function DataProviderEndpointsToolView({
     ...props
 }: DataProviderEndpointsToolViewProps) {
     const theme = useTheme();
-    const colorScheme = useColorScheme();
+
+    // Convert color-mix(in oklab, var(--muted) 20%, transparent) to hex
+    const mutedBg = theme.muted === '#e8e8e8' ? '#e8e8e833' : '#30303033';
 
     const extractedData = extractDataProviderEndpointsData(toolCall, toolContent);
     const { serviceName, endpoints, isSuccess: actualIsSuccess, errorMessage } = extractedData;
@@ -162,55 +152,42 @@ export function DataProviderEndpointsToolView({
         container: {
             flex: 1,
             backgroundColor: theme.background,
-        },
-        scrollView: {
-            flex: 1,
-        },
-        content: {
             padding: 16,
         },
         loadingContainer: {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
-            padding: 20,
+            gap: 16,
         },
-        loadingIcon: {
-            width: 64,
-            height: 64,
-            borderRadius: 12,
-            backgroundColor: colorScheme === 'dark' ? '#1f2937' : '#f3f4f6',
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
+        emptyState: {
+            flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
+            gap: 16,
+        },
+        section: {
             marginBottom: 16,
         },
-        loadingTitle: {
-            fontSize: 16,
-            fontWeight: '500',
-            color: theme.foreground,
-            marginBottom: 8,
-        },
-        loadingSubtitle: {
-            fontSize: 14,
-            color: theme.mutedForeground,
-        },
-        providerContainer: {
+        sectionTitle: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 16,
-            padding: 16,
-            backgroundColor: colorScheme === 'dark' ? '#111827' : '#f9fafb',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
-            marginBottom: 24,
+            marginBottom: 8,
+            gap: 8,
+        },
+        sectionTitleText: {
+            color: theme.foreground,
+            fontWeight: '600' as const,
+        },
+        providerHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
         },
         providerIcon: {
             width: 48,
             height: 48,
-            borderRadius: 8,
+            borderRadius: 12,
             justifyContent: 'center',
             alignItems: 'center',
             backgroundColor: providerConfig.color,
@@ -219,13 +196,11 @@ export function DataProviderEndpointsToolView({
             flex: 1,
         },
         providerName: {
-            fontSize: 18,
-            fontWeight: '600',
             color: theme.foreground,
+            fontWeight: '600' as const,
             marginBottom: 4,
         },
         providerDescription: {
-            fontSize: 14,
             color: theme.mutedForeground,
         },
         statusBadge: {
@@ -234,50 +209,24 @@ export function DataProviderEndpointsToolView({
             paddingHorizontal: 8,
             paddingVertical: 4,
             borderRadius: 12,
-            backgroundColor: actualIsSuccess
-                ? (colorScheme === 'dark' ? '#064e3b20' : '#dcfce7')
-                : (colorScheme === 'dark' ? '#7f1d1d20' : '#fecaca'),
-            borderWidth: 1,
-            borderColor: actualIsSuccess
-                ? (colorScheme === 'dark' ? '#059669' : '#10b981')
-                : (colorScheme === 'dark' ? '#dc2626' : '#ef4444'),
+            backgroundColor: actualIsSuccess ? theme.secondary : theme.destructive,
+            gap: 4,
         },
         statusText: {
             fontSize: 12,
-            fontWeight: '500',
-            marginLeft: 4,
-            color: actualIsSuccess
-                ? (colorScheme === 'dark' ? '#6ee7b7' : '#059669')
-                : (colorScheme === 'dark' ? '#fca5a5' : '#dc2626'),
-        },
-        sectionHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 16,
-        },
-        sectionTitle: {
-            fontSize: 14,
-            fontWeight: '500',
-            color: theme.foreground,
-        },
-        statusGrid: {
-            gap: 12,
+            fontWeight: '500' as const,
+            color: actualIsSuccess ? theme.secondaryForeground : theme.destructiveForeground,
         },
         statusItem: {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: 12,
-            backgroundColor: colorScheme === 'dark' ? '#111827' : '#ffffff',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
+            marginBottom: 8,
         },
         statusLeft: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 12,
+            gap: 8,
         },
         statusDot: {
             width: 8,
@@ -285,170 +234,181 @@ export function DataProviderEndpointsToolView({
             borderRadius: 4,
         },
         statusLabel: {
-            fontSize: 14,
-            fontWeight: '500',
             color: theme.foreground,
+            fontWeight: '500' as const,
         },
         statusValue: {
-            fontSize: 14,
             color: theme.mutedForeground,
-            fontFamily: 'Monaco, monospace',
+            fontFamily: 'monospace',
         },
-        successContainer: {
-            padding: 16,
-            backgroundColor: colorScheme === 'dark' ? '#064e3b20' : '#dcfce7',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#059669' : '#10b981',
-            marginTop: 16,
+        successIcon: {
+            color: theme.secondary,
         },
-        successHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 8,
-        },
-        successTitle: {
-            fontSize: 14,
-            fontWeight: '500',
-            color: colorScheme === 'dark' ? '#6ee7b7' : '#059669',
-        },
-        successDescription: {
-            fontSize: 12,
-            color: colorScheme === 'dark' ? '#6ee7b7' : '#059669',
-            lineHeight: 16,
-        },
-        errorContainer: {
-            backgroundColor: colorScheme === 'dark' ? '#2d1b1b' : '#f8d7da',
-            borderColor: colorScheme === 'dark' ? '#5a2a2a' : '#f5c6cb',
-            borderWidth: 1,
-            borderRadius: 8,
-            padding: 12,
-            marginBottom: 16,
+        successText: {
+            color: theme.secondary,
         },
         errorText: {
-            color: colorScheme === 'dark' ? '#f87171' : '#721c24',
-            fontSize: 14,
-            lineHeight: 20,
+            color: theme.destructive,
         },
     });
 
     const renderLoadingState = () => (
         <View style={styles.loadingContainer}>
-            <View style={styles.loadingIcon}>
-                <ActivityIndicator size="large" color={theme.mutedForeground} />
-            </View>
-            <Text style={styles.loadingTitle}>Loading provider...</Text>
-            <Text style={styles.loadingSubtitle}>Connecting to data source</Text>
+            <ActivityIndicator size="large" color={theme.secondary} />
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                Loading provider...
+            </Body>
+            <Caption style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                Connecting to data source
+            </Caption>
         </View>
     );
 
     const renderContent = () => {
         if (!actualIsSuccess && errorMessage) {
             return (
-                <View style={styles.errorContainer}>
-                    <Text style={styles.errorText}>{errorMessage}</Text>
+                <View style={styles.emptyState}>
+                    <AlertTriangle size={48} color={theme.destructive} />
+                    <Body style={[styles.errorText, { textAlign: 'center' }]}>
+                        {errorMessage}
+                    </Body>
                 </View>
             );
         }
 
         return (
-            <View>
-                <View style={styles.providerContainer}>
-                    <View style={styles.providerIcon}>
-                        <IconComponent size={24} color="#ffffff" />
+            <ScrollView style={{ flex: 1 }}>
+                {/* Provider Section */}
+                <View style={styles.section}>
+                    <View style={styles.sectionTitle}>
+                        <Database size={16} color={theme.foreground} />
+                        <Body style={styles.sectionTitleText}>Data Provider</Body>
                     </View>
+                    <Card
+                        style={{
+                            backgroundColor: mutedBg,
+                            borderColor: theme.muted,
+                        }}
+                        bordered
+                        elevated={false}
+                    >
+                        <CardContent style={{ padding: 0 }}>
+                            <View style={styles.providerHeader}>
+                                <View style={styles.providerIcon}>
+                                    <IconComponent size={24} color="#ffffff" />
+                                </View>
 
-                    <View style={styles.providerInfo}>
-                        <Text style={styles.providerName}>{providerConfig.name}</Text>
-                        <Text style={styles.providerDescription}>
-                            {endpointCount > 0 ? `${endpointCount} endpoints loaded and ready` : 'Endpoints loaded and ready'}
-                        </Text>
-                    </View>
+                                <View style={styles.providerInfo}>
+                                    <Body style={styles.providerName}>
+                                        {providerConfig.name}
+                                    </Body>
+                                    <Caption style={styles.providerDescription}>
+                                        {endpointCount > 0 ? `${endpointCount} endpoints loaded and ready` : 'Endpoints loaded and ready'}
+                                    </Caption>
+                                </View>
 
-                    <View style={styles.statusBadge}>
-                        {actualIsSuccess ? (
-                            <CheckCircle size={12} color={styles.statusText.color} />
-                        ) : (
-                            <AlertTriangle size={12} color={styles.statusText.color} />
-                        )}
-                        <Text style={styles.statusText}>
-                            {actualIsSuccess ? 'Connected' : 'Failed'}
-                        </Text>
-                    </View>
+                                <View style={styles.statusBadge}>
+                                    {actualIsSuccess ? (
+                                        <CheckCircle size={12} color={theme.secondaryForeground} />
+                                    ) : (
+                                        <AlertTriangle size={12} color={theme.destructiveForeground} />
+                                    )}
+                                    <Caption style={styles.statusText}>
+                                        {actualIsSuccess ? 'Connected' : 'Failed'}
+                                    </Caption>
+                                </View>
+                            </View>
+                        </CardContent>
+                    </Card>
                 </View>
 
-                <View style={styles.sectionHeader}>
-                    <Database size={16} color={theme.foreground} />
-                    <Text style={styles.sectionTitle}>Provider Status</Text>
-                    <ChevronRight size={12} color={theme.mutedForeground} />
+                {/* Status Section */}
+                <View style={styles.section}>
+                    <View style={styles.sectionTitle}>
+                        <CheckCircle size={16} color={theme.foreground} />
+                        <Body style={styles.sectionTitleText}>Status Overview</Body>
+                    </View>
+                    <Card
+                        style={{
+                            backgroundColor: mutedBg,
+                            borderColor: theme.muted,
+                        }}
+                        bordered
+                        elevated={false}
+                    >
+                        <CardContent style={{ padding: 0 }}>
+                            <View style={styles.statusItem}>
+                                <View style={styles.statusLeft}>
+                                    <View style={[styles.statusDot, { backgroundColor: theme.secondary }]} />
+                                    <Body style={styles.statusLabel}>Connection Status</Body>
+                                </View>
+                                <View style={styles.statusBadge}>
+                                    {actualIsSuccess ? (
+                                        <CheckCircle size={12} color={theme.secondaryForeground} />
+                                    ) : (
+                                        <AlertTriangle size={12} color={theme.destructiveForeground} />
+                                    )}
+                                    <Caption style={styles.statusText}>
+                                        {actualIsSuccess ? 'Active' : 'Inactive'}
+                                    </Caption>
+                                </View>
+                            </View>
+
+                            <View style={styles.statusItem}>
+                                <View style={styles.statusLeft}>
+                                    <View style={[styles.statusDot, { backgroundColor: '#3b82f6' }]} />
+                                    <Body style={styles.statusLabel}>Endpoints Available</Body>
+                                </View>
+                                <Caption style={styles.statusValue}>
+                                    {endpointCount > 0 ? `${endpointCount} endpoints` : 'Ready'}
+                                </Caption>
+                            </View>
+
+                            <View style={styles.statusItem}>
+                                <View style={styles.statusLeft}>
+                                    <View style={[styles.statusDot, { backgroundColor: '#8b5cf6' }]} />
+                                    <Body style={styles.statusLabel}>Data Provider</Body>
+                                </View>
+                                <Caption style={styles.statusValue}>
+                                    {serviceName || 'linkedin'}
+                                </Caption>
+                            </View>
+                        </CardContent>
+                    </Card>
                 </View>
 
-                <View style={styles.statusGrid}>
-                    <View style={styles.statusItem}>
-                        <View style={styles.statusLeft}>
-                            <View style={[styles.statusDot, { backgroundColor: '#10b981' }]} />
-                            <Text style={styles.statusLabel}>Connection Status</Text>
-                        </View>
-                        <View style={styles.statusBadge}>
-                            {actualIsSuccess ? (
-                                <CheckCircle size={12} color={styles.statusText.color} />
-                            ) : (
-                                <AlertTriangle size={12} color={styles.statusText.color} />
-                            )}
-                            <Text style={styles.statusText}>
-                                {actualIsSuccess ? 'Active' : 'Inactive'}
-                            </Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.statusItem}>
-                        <View style={styles.statusLeft}>
-                            <View style={[styles.statusDot, { backgroundColor: '#3b82f6' }]} />
-                            <Text style={styles.statusLabel}>Endpoints Available</Text>
-                        </View>
-                        <Text style={styles.statusValue}>
-                            {endpointCount > 0 ? `${endpointCount} endpoints` : 'Ready'}
-                        </Text>
-                    </View>
-
-                    <View style={styles.statusItem}>
-                        <View style={styles.statusLeft}>
-                            <View style={[styles.statusDot, { backgroundColor: '#8b5cf6' }]} />
-                            <Text style={styles.statusLabel}>Data Provider</Text>
-                        </View>
-                        <Text style={styles.statusValue}>
-                            {serviceName || 'linkedin'}
-                        </Text>
-                    </View>
-                </View>
-
+                {/* Success Message */}
                 {actualIsSuccess && (
-                    <View style={styles.successContainer}>
-                        <View style={styles.successHeader}>
-                            <CheckCircle size={16} color={styles.successTitle.color} />
-                            <Text style={styles.successTitle}>Provider Ready</Text>
-                        </View>
-                        <Text style={styles.successDescription}>
-                            Data provider endpoints have been loaded successfully and are ready to process requests.
-                        </Text>
+                    <View style={styles.section}>
+                        <Card
+                            style={{
+                                backgroundColor: mutedBg,
+                                borderColor: theme.secondary,
+                            }}
+                            bordered
+                            elevated={false}
+                        >
+                            <CardContent style={{ padding: 0 }}>
+                                <View style={styles.sectionTitle}>
+                                    <CheckCircle size={16} color={theme.secondary} />
+                                    <Body style={[styles.sectionTitleText, { color: theme.secondary }]}>
+                                        Provider Ready
+                                    </Body>
+                                </View>
+                                <Caption style={[styles.successText, { marginTop: 0 }]}>
+                                    Data provider endpoints have been loaded successfully and are ready to process requests.
+                                </Caption>
+                            </CardContent>
+                        </Card>
                     </View>
                 )}
-            </View>
+            </ScrollView>
         );
     };
 
     return (
         <View style={styles.container}>
-            {isStreaming ? (
-                renderLoadingState()
-            ) : (
-                <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                    <View style={styles.content}>
-                        {renderContent()}
-                    </View>
-                </ScrollView>
-            )}
+            {isStreaming ? renderLoadingState() : renderContent()}
         </View>
     );
 } 

@@ -169,7 +169,7 @@ export const RightPanel: React.FC<RightPanelProps> = ({ isVisible, onClose, mess
         navButton: {
             width: 32,
             height: 32,
-            borderRadius: 8,
+            borderRadius: 12,
             backgroundColor: theme.muted,
             justifyContent: 'center' as const,
             alignItems: 'center' as const,

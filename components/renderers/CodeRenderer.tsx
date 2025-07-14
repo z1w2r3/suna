@@ -10,42 +10,6 @@ interface CodeRendererProps {
     style?: any;
 }
 
-// Map of language aliases to colors and icons
-const languageMap: Record<string, { color: string; name: string }> = {
-    js: { color: '#F7DF1E', name: 'JavaScript' },
-    jsx: { color: '#61DAFB', name: 'JSX' },
-    ts: { color: '#3178C6', name: 'TypeScript' },
-    tsx: { color: '#3178C6', name: 'TSX' },
-    html: { color: '#E34F26', name: 'HTML' },
-    css: { color: '#1572B6', name: 'CSS' },
-    json: { color: '#000000', name: 'JSON' },
-    md: { color: '#000000', name: 'Markdown' },
-    markdown: { color: '#000000', name: 'Markdown' },
-    python: { color: '#3776AB', name: 'Python' },
-    py: { color: '#3776AB', name: 'Python' },
-    rust: { color: '#000000', name: 'Rust' },
-    rs: { color: '#000000', name: 'Rust' },
-    go: { color: '#00ADD8', name: 'Go' },
-    java: { color: '#ED8B00', name: 'Java' },
-    c: { color: '#A8B9CC', name: 'C' },
-    cpp: { color: '#00599C', name: 'C++' },
-    cs: { color: '#239120', name: 'C#' },
-    csharp: { color: '#239120', name: 'C#' },
-    php: { color: '#777BB4', name: 'PHP' },
-    ruby: { color: '#CC342D', name: 'Ruby' },
-    rb: { color: '#CC342D', name: 'Ruby' },
-    swift: { color: '#FA7343', name: 'Swift' },
-    kotlin: { color: '#0095D5', name: 'Kotlin' },
-    xml: { color: '#FF6600', name: 'XML' },
-    sql: { color: '#336791', name: 'SQL' },
-    shell: { color: '#89E051', name: 'Shell' },
-    bash: { color: '#89E051', name: 'Bash' },
-    sh: { color: '#89E051', name: 'Shell' },
-    yaml: { color: '#000000', name: 'YAML' },
-    yml: { color: '#000000', name: 'YAML' },
-    text: { color: '#666666', name: 'Text' },
-    txt: { color: '#666666', name: 'Text' },
-};
 
 // Basic syntax highlighting for common languages
 const highlightSyntax = (content: string, language: string, isDark: boolean) => {
@@ -179,11 +143,6 @@ export function CodeRenderer({ content, language = 'text', showLineNumbers = tru
         }));
     }, [content, language, isDark]);
 
-    const getLanguageInfo = (lang: string) => {
-        const info = languageMap[lang.toLowerCase()] || languageMap['text'];
-        return info;
-    };
-
     const getTokenColor = (tokenType: string) => {
         const colors = {
             keyword: isDark ? '#569CD6' : '#0000FF',
@@ -213,25 +172,20 @@ export function CodeRenderer({ content, language = 'text', showLineNumbers = tru
     const renderCodeLine = ({ item, index }: { item: any; index: number }) => (
         <View style={{
             flexDirection: 'row',
-            backgroundColor: index % 2 === 0 ? 'transparent' : (isDark ? '#2a2a2a' : '#f8f9fa'),
             minHeight: 20,
             alignItems: 'flex-start',
-            paddingVertical: 2,
         }}>
             {showLineNumbers && (
                 <View style={{
-                    backgroundColor: isDark ? '#333' : '#f0f0f0',
                     paddingHorizontal: 12,
                     paddingVertical: 2,
-                    borderRightWidth: 1,
-                    borderRightColor: isDark ? '#404040' : '#e9ecef',
                     minWidth: 50,
                     alignItems: 'center',
                     justifyContent: 'center',
                 }}>
                     <Text style={{
                         fontSize: 11,
-                        color: isDark ? '#888' : '#666',
+                        color: theme.mutedForeground,
                         fontFamily: 'monospace',
                     }}>
                         {item.number}
@@ -251,77 +205,21 @@ export function CodeRenderer({ content, language = 'text', showLineNumbers = tru
         </View>
     );
 
-    const renderHeader = () => {
-        const langInfo = getLanguageInfo(language);
-
-        return (
-            <View style={{
-                backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-                borderBottomWidth: 1,
-                borderBottomColor: isDark ? '#404040' : '#e9ecef',
-                paddingHorizontal: 16,
-                paddingVertical: 12,
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-            }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: 6,
-                        backgroundColor: langInfo.color,
-                        marginRight: 8
-                    }} />
-                    <Text style={{
-                        fontSize: 14,
-                        fontWeight: '600',
-                        color: theme.foreground,
-                    }}>
-                        {langInfo.name}
-                    </Text>
-                </View>
-                <Text style={{
-                    fontSize: 12,
-                    color: theme.foreground,
-                    opacity: 0.7
-                }}>
-                    {codeLines.length} line{codeLines.length !== 1 ? 's' : ''}
-                </Text>
-            </View>
-        );
-    };
-
-    if (!content) {
-        return (
-            <View style={[{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                backgroundColor: theme.background,
-                padding: 20
-            }, style]}>
-                <Text style={{
-                    fontSize: 16,
-                    color: theme.foreground,
-                    opacity: 0.7
-                }}>
-                    No code to display
-                </Text>
-            </View>
-        );
-    }
-
     return (
-        <View style={[{
-            flex: 1,
-            backgroundColor: theme.background,
-            borderWidth: 1,
-            borderColor: isDark ? '#404040' : '#e9ecef',
-            borderRadius: 8,
-            overflow: 'hidden'
-        }, style]}>
-            {renderHeader()}
+        <View style={{ flex: 1, position: 'relative' }}>
+            {showLineNumbers && (
+                <View style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: 50,
+                    backgroundColor: theme.muted,
+                    borderRightWidth: 1,
+                    borderRightColor: theme.border,
+                    zIndex: 0,
+                }} />
+            )}
             <FlatList
                 data={codeLines}
                 renderItem={renderCodeLine}

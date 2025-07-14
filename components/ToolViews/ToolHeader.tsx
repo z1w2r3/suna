@@ -2,7 +2,8 @@ import { useTheme } from '@/hooks/useThemeColor';
 import { AlertTriangle, CheckCircle, CheckCircle2, Clock, Computer, MessageCircleQuestion } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Caption, H4 } from '../Typography';
+import { Caption, H5 } from '../Typography';
+import { useToolViewContext } from './ToolViewContext';
 
 interface ToolHeaderProps {
     toolName: string;
@@ -41,16 +42,25 @@ export const ToolHeader: React.FC<ToolHeaderProps> = ({
 }) => {
     const theme = useTheme();
 
+    // Try to get context, but don't throw if not available (for tools without extensions)
+    let context;
+    try {
+        context = useToolViewContext();
+    } catch {
+        context = null;
+    }
+
     const Icon = IconComponent || getToolIcon(toolName);
     const displayName = getToolDisplayName(toolName);
 
     const styles = StyleSheet.create({
         header: {
             backgroundColor: theme.muted + '20',
-            paddingHorizontal: 16,
-            paddingVertical: 12,
+            paddingHorizontal: 24,
+            paddingVertical: 16,
             borderBottomWidth: 1,
             borderBottomColor: theme.border,
+            height: 64,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -58,15 +68,6 @@ export const ToolHeader: React.FC<ToolHeaderProps> = ({
         headerLeft: {
             flexDirection: 'row',
             alignItems: 'center',
-        },
-        iconContainer: {
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: theme.primary + '20',
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginRight: 12,
         },
         title: {
             color: theme.foreground,
@@ -106,18 +107,19 @@ export const ToolHeader: React.FC<ToolHeaderProps> = ({
     return (
         <View style={styles.header}>
             <View style={styles.headerLeft}>
-                <View style={styles.iconContainer}>
-                    <Icon size={16} color={theme.primary} />
-                </View>
-                <H4 style={styles.title}>{displayName}</H4>
+                <H5 style={styles.title}>{displayName}</H5>
             </View>
 
-            <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-                <StatusIcon size={12} color={statusColor} />
-                <Caption style={[styles.statusText, { color: statusColor }]}>
-                    {statusText}
-                </Caption>
-            </View>
+            {context?.headerExtensions ? (
+                context.headerExtensions
+            ) : (
+                <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+                    <StatusIcon size={12} color={statusColor} />
+                    <Caption style={[styles.statusText, { color: statusColor }]}>
+                        {statusText}
+                    </Caption>
+                </View>
+            )}
         </View>
     );
 };

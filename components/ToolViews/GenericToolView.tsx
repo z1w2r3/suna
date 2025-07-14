@@ -1,7 +1,8 @@
 import { useTheme } from '@/hooks/useThemeColor';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Body, Caption, H4 } from '../Typography';
+import { Body, Caption } from '../Typography';
+import { Card, CardContent } from '../ui/Card';
 import { ToolViewProps } from './ToolViewRegistry';
 
 interface GenericToolViewProps extends ToolViewProps {
@@ -81,6 +82,9 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
 }) => {
     const theme = useTheme();
 
+    // Convert color-mix(in oklab, var(--muted) 20%, transparent) to hex
+    const mutedBg = theme.muted === '#e8e8e8' ? '#e8e8e833' : '#30303033';
+
     const styles = StyleSheet.create({
         container: {
             flex: 1,
@@ -119,12 +123,6 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
             marginBottom: 8,
             fontWeight: '600' as const,
         },
-        parameterContainer: {
-            backgroundColor: theme.muted + '40',
-            padding: 12,
-            borderRadius: 6,
-            marginBottom: 8,
-        },
         parameterKey: {
             color: theme.mutedForeground,
             fontSize: 12,
@@ -135,15 +133,13 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
             fontFamily: 'monospace',
             fontSize: 13,
         },
-        resultContainer: {
-            backgroundColor: theme.card,
-            padding: 12,
-            borderRadius: 6,
-            borderWidth: 1,
-            borderColor: theme.border,
-        },
         resultText: {
             color: theme.foreground,
+            fontFamily: 'monospace',
+            fontSize: 13,
+        },
+        errorText: {
+            color: theme.destructive,
             fontFamily: 'monospace',
             fontSize: 13,
         },
@@ -173,39 +169,31 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
     } = extractGenericToolData(toolCall, toolContent);
 
     const displayName = functionName || 'Unknown Tool';
-    const statusColor = isStreaming
-        ? theme.accent
-        : actualIsSuccess
-            ? theme.primary
-            : theme.destructive;
-
-    const statusText = isStreaming
-        ? 'Running...'
-        : actualIsSuccess
-            ? 'Completed'
-            : 'Failed';
 
     return (
         <View style={[styles.container, { backgroundColor: theme.background }]}>
-            <View style={styles.header}>
-                <H4 style={styles.toolName}>{displayName}</H4>
-                <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-                    <Caption style={[styles.statusText, { color: statusColor }]}>
-                        {statusText}
-                    </Caption>
-                </View>
-            </View>
-
             {parameters && Object.keys(parameters).length > 0 && (
                 <View style={styles.section}>
                     <Body style={styles.sectionTitle}>Parameters</Body>
                     {Object.entries(parameters).map(([key, value]) => (
-                        <View key={key} style={styles.parameterContainer}>
-                            <Caption style={styles.parameterKey}>{key}</Caption>
-                            <Body style={styles.parameterValue}>
-                                {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-                            </Body>
-                        </View>
+                        <Card
+                            key={key}
+                            style={{
+                                backgroundColor: mutedBg,
+                                borderColor: theme.muted,
+                                marginBottom: 8,
+                                padding: 12,
+                            }}
+                            bordered
+                            elevated={false}
+                        >
+                            <CardContent style={{ padding: 0 }}>
+                                <Caption style={styles.parameterKey}>{key}</Caption>
+                                <Body style={styles.parameterValue}>
+                                    {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+                                </Body>
+                            </CardContent>
+                        </Card>
                     ))}
                 </View>
             )}
@@ -213,22 +201,40 @@ export const GenericToolView: React.FC<GenericToolViewProps> = ({
             {result && (
                 <View style={styles.section}>
                     <Body style={styles.sectionTitle}>Result</Body>
-                    <View style={styles.resultContainer}>
-                        <Body style={styles.resultText}>
-                            {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-                        </Body>
-                    </View>
+                    <Card
+                        style={{
+                            backgroundColor: mutedBg,
+                            borderColor: theme.muted,
+                        }}
+                        bordered
+                        elevated={false}
+                    >
+                        <CardContent style={{ padding: 0 }}>
+                            <Body style={styles.resultText}>
+                                {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+                            </Body>
+                        </CardContent>
+                    </Card>
                 </View>
             )}
 
             {errorMessage && (
                 <View style={styles.section}>
                     <Body style={[styles.sectionTitle, { color: theme.destructive }]}>Error</Body>
-                    <View style={[styles.resultContainer, { borderColor: theme.destructive }]}>
-                        <Body style={[styles.resultText, { color: theme.destructive }]}>
-                            {errorMessage}
-                        </Body>
-                    </View>
+                    <Card
+                        style={{
+                            backgroundColor: mutedBg,
+                            borderColor: theme.destructive,
+                        }}
+                        bordered
+                        elevated={false}
+                    >
+                        <CardContent style={{ padding: 0 }}>
+                            <Body style={styles.errorText}>
+                                {errorMessage}
+                            </Body>
+                        </CardContent>
+                    </Card>
                 </View>
             )}
         </View>

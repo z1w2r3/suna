@@ -1,4 +1,3 @@
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTheme } from '@/hooks/useThemeColor';
 import {
     AlertTriangle,
@@ -14,7 +13,9 @@ import {
     Users
 } from 'lucide-react-native';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Body, Caption } from '../Typography';
+import { Card, CardContent } from '../ui/Card';
 import { ToolViewProps } from './ToolViewRegistry';
 
 interface ExecuteDataProviderCallToolViewProps extends ToolViewProps {
@@ -30,43 +31,31 @@ const PROVIDER_CONFIG = {
         name: 'LinkedIn Data Provider',
         icon: Users,
         color: '#0077B5',
-        bgColor: { dark: '#1e3a8a20', light: '#dbeafe' },
-        textColor: { dark: '#60a5fa', light: '#1d4ed8' }
     },
     'twitter': {
         name: 'Twitter Data Provider',
         icon: MessageCircle,
         color: '#1DA1F2',
-        bgColor: { dark: '#0c4a6e20', light: '#e0f2fe' },
-        textColor: { dark: '#7dd3fc', light: '#0369a1' }
     },
     'zillow': {
         name: 'Zillow Data Provider',
         icon: Home,
         color: '#10B981',
-        bgColor: { dark: '#064e3b20', light: '#dcfce7' },
-        textColor: { dark: '#6ee7b7', light: '#059669' }
     },
     'amazon': {
         name: 'Amazon Data Provider',
         icon: ShoppingBag,
         color: '#F59E0B',
-        bgColor: { dark: '#92400e20', light: '#fef3c7' },
-        textColor: { dark: '#fbbf24', light: '#d97706' }
     },
     'yahoo_finance': {
         name: 'Yahoo Finance Data Provider',
         icon: TrendingUp,
         color: '#8B5CF6',
-        bgColor: { dark: '#581c8720', light: '#f3e8ff' },
-        textColor: { dark: '#c084fc', light: '#7c3aed' }
     },
     'active_jobs': {
         name: 'Active Jobs Data Provider',
         icon: Briefcase,
         color: '#6366F1',
-        bgColor: { dark: '#3730a320', light: '#e0e7ff' },
-        textColor: { dark: '#a5b4fc', light: '#4f46e5' }
     }
 };
 
@@ -149,8 +138,10 @@ export function ExecuteDataProviderCallToolView({
     ...props
 }: ExecuteDataProviderCallToolViewProps) {
     const theme = useTheme();
-    const colorScheme = useColorScheme();
     const [showRawJSON, setShowRawJSON] = useState(false);
+
+    // Convert color-mix(in oklab, var(--muted) 20%, transparent) to hex
+    const mutedBg = theme.muted === '#e8e8e8' ? '#e8e8e833' : '#30303033';
 
     const extractedData = extractDataProviderCallData(toolCall, toolContent);
     const { serviceName, route, payload, output, isSuccess: actualIsSuccess, errorMessage } = extractedData;
@@ -167,55 +158,42 @@ export function ExecuteDataProviderCallToolView({
         container: {
             flex: 1,
             backgroundColor: theme.background,
-        },
-        scrollView: {
-            flex: 1,
-        },
-        content: {
             padding: 16,
         },
         loadingContainer: {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
-            padding: 20,
+            gap: 16,
         },
-        loadingIcon: {
-            width: 64,
-            height: 64,
-            borderRadius: 12,
-            backgroundColor: colorScheme === 'dark' ? '#1f2937' : '#f3f4f6',
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
+        emptyState: {
+            flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
+            gap: 16,
+        },
+        section: {
             marginBottom: 16,
         },
-        loadingTitle: {
-            fontSize: 16,
-            fontWeight: '500',
-            color: theme.foreground,
-            marginBottom: 8,
-        },
-        loadingSubtitle: {
-            fontSize: 14,
-            color: theme.mutedForeground,
-        },
-        providerContainer: {
+        sectionTitle: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 16,
-            padding: 16,
-            backgroundColor: colorScheme === 'dark' ? '#111827' : '#f9fafb',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
-            marginBottom: 24,
+            marginBottom: 8,
+            gap: 8,
+        },
+        sectionTitleText: {
+            color: theme.foreground,
+            fontWeight: '600' as const,
+        },
+        providerHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
         },
         providerIcon: {
             width: 48,
             height: 48,
-            borderRadius: 8,
+            borderRadius: 12,
             justifyContent: 'center',
             alignItems: 'center',
             backgroundColor: providerConfig.color,
@@ -224,274 +202,244 @@ export function ExecuteDataProviderCallToolView({
             flex: 1,
         },
         providerName: {
-            fontSize: 18,
-            fontWeight: '600',
             color: theme.foreground,
+            fontWeight: '600' as const,
             marginBottom: 4,
         },
         providerService: {
-            fontSize: 14,
             color: theme.mutedForeground,
         },
         routeBadge: {
             paddingHorizontal: 8,
             paddingVertical: 4,
-            borderRadius: 4,
-            backgroundColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
+            borderRadius: 12,
+            backgroundColor: theme.muted,
             borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#4b5563' : '#d1d5db',
+            borderColor: theme.muted,
         },
         routeText: {
             fontSize: 12,
-            fontFamily: 'Monaco, monospace',
-            color: theme.foreground,
-        },
-        errorContainer: {
-            padding: 16,
-            backgroundColor: colorScheme === 'dark' ? '#7f1d1d20' : '#fecaca',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#dc2626' : '#ef4444',
-            marginBottom: 24,
-        },
-        errorHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 8,
-        },
-        errorTitle: {
-            fontSize: 14,
-            fontWeight: '500',
-            color: colorScheme === 'dark' ? '#fca5a5' : '#dc2626',
-        },
-        errorText: {
-            fontSize: 12,
-            color: colorScheme === 'dark' ? '#fca5a5' : '#dc2626',
-            fontFamily: 'Monaco, monospace',
-            lineHeight: 16,
-        },
-        sectionHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 16,
-        },
-        sectionTitle: {
-            fontSize: 14,
-            fontWeight: '500',
+            fontFamily: 'monospace',
             color: theme.foreground,
         },
         parameterItem: {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: 12,
-            backgroundColor: colorScheme === 'dark' ? '#111827' : '#ffffff',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
             marginBottom: 8,
         },
         parameterLeft: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 12,
+            gap: 8,
             flex: 1,
         },
         parameterDot: {
             width: 8,
             height: 8,
             borderRadius: 4,
-            backgroundColor: colorScheme === 'dark' ? '#6b7280' : '#9ca3af',
+            backgroundColor: theme.muted,
         },
         parameterKey: {
-            fontSize: 14,
-            fontFamily: 'Monaco, monospace',
-            fontWeight: '500',
+            fontFamily: 'monospace',
+            fontWeight: '500' as const,
             color: theme.foreground,
         },
         parameterValue: {
-            fontSize: 14,
             color: theme.mutedForeground,
-            fontFamily: 'Monaco, monospace',
+            fontFamily: 'monospace',
+            fontSize: 12,
             maxWidth: 120,
         },
         jsonToggle: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
-            padding: 12,
-            backgroundColor: colorScheme === 'dark' ? '#111827' : '#f9fafb',
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
-            marginTop: 12,
+            marginTop: 8,
         },
         jsonToggleText: {
-            fontSize: 14,
-            fontWeight: '500',
             color: theme.foreground,
+            fontWeight: '500' as const,
         },
         jsonContainer: {
-            marginTop: 12,
+            marginTop: 8,
             padding: 16,
-            backgroundColor: colorScheme === 'dark' ? '#0f172a' : '#1e293b',
+            backgroundColor: theme.background === '#ffffff' ? '#1e293b' : '#0f172a',
             borderRadius: 8,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
         },
         jsonText: {
             fontSize: 12,
-            fontFamily: 'Monaco, monospace',
+            fontFamily: 'monospace',
             color: '#22c55e',
             lineHeight: 16,
         },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            paddingVertical: 32,
+        errorText: {
+            color: theme.destructive,
+            fontFamily: 'monospace',
+            fontSize: 12,
+            lineHeight: 16,
         },
-        emptyIcon: {
-            width: 48,
-            height: 48,
-            borderRadius: 8,
-            backgroundColor: colorScheme === 'dark' ? '#1f2937' : '#f3f4f6',
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#374151' : '#e5e7eb',
-            justifyContent: 'center',
-            alignItems: 'center',
-            marginBottom: 12,
-        },
-        emptyText: {
-            fontSize: 14,
-            color: theme.mutedForeground,
-            textAlign: 'center',
+        emptyDescription: {
             flexDirection: 'row',
             alignItems: 'center',
+            gap: 8,
         },
     });
 
     const renderLoadingState = () => (
         <View style={styles.loadingContainer}>
-            <View style={styles.loadingIcon}>
-                <ActivityIndicator size="large" color={theme.mutedForeground} />
-            </View>
-            <Text style={styles.loadingTitle}>Executing call...</Text>
-            <Text style={styles.loadingSubtitle}>
+            <ActivityIndicator size="large" color={theme.secondary} />
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                Executing call...
+            </Body>
+            <Caption style={{ color: theme.mutedForeground, textAlign: 'center' }}>
                 Calling {serviceName || 'data provider'}
-            </Text>
+            </Caption>
         </View>
     );
 
     const renderContent = () => {
         return (
-            <View>
-                <View style={styles.providerContainer}>
-                    <View style={styles.providerIcon}>
-                        <IconComponent size={24} color="#ffffff" />
+            <ScrollView style={{ flex: 1 }}>
+                {/* Provider Section */}
+                <View style={styles.section}>
+                    <View style={styles.sectionTitle}>
+                        <Database size={16} color={theme.foreground} />
+                        <Body style={styles.sectionTitleText}>Data Provider Call</Body>
                     </View>
+                    <Card
+                        style={{
+                            backgroundColor: mutedBg,
+                            borderColor: theme.muted,
+                        }}
+                        bordered
+                        elevated={false}
+                    >
+                        <CardContent style={{ padding: 0 }}>
+                            <View style={styles.providerHeader}>
+                                <View style={styles.providerIcon}>
+                                    <IconComponent size={24} color="#ffffff" />
+                                </View>
 
-                    <View style={styles.providerInfo}>
-                        <Text style={styles.providerName}>{providerConfig.name}</Text>
-                        {serviceName && (
-                            <Text style={styles.providerService}>Service: {serviceName}</Text>
-                        )}
-                    </View>
+                                <View style={styles.providerInfo}>
+                                    <Body style={styles.providerName}>
+                                        {providerConfig.name}
+                                    </Body>
+                                    {serviceName && (
+                                        <Caption style={styles.providerService}>
+                                            Service: {serviceName}
+                                        </Caption>
+                                    )}
+                                </View>
 
-                    {route && (
-                        <View style={styles.routeBadge}>
-                            <Text style={styles.routeText}>{route}</Text>
-                        </View>
-                    )}
+                                {route && (
+                                    <View style={styles.routeBadge}>
+                                        <Caption style={styles.routeText}>{route}</Caption>
+                                    </View>
+                                )}
+                            </View>
+                        </CardContent>
+                    </Card>
                 </View>
 
+                {/* Error Section */}
                 {output && !actualIsSuccess && (
-                    <View style={styles.errorContainer}>
-                        <View style={styles.errorHeader}>
-                            <AlertTriangle size={16} color={styles.errorTitle.color} />
-                            <Text style={styles.errorTitle}>Execution Failed</Text>
+                    <View style={styles.section}>
+                        <View style={styles.sectionTitle}>
+                            <AlertTriangle size={16} color={theme.destructive} />
+                            <Body style={[styles.sectionTitleText, { color: theme.destructive }]}>
+                                Execution Failed
+                            </Body>
                         </View>
-                        <Text style={styles.errorText}>{output}</Text>
-                    </View>
-                )}
-
-                {hasPayload && (
-                    <View style={{ marginBottom: 24 }}>
-                        <View style={styles.sectionHeader}>
-                            <Settings size={16} color={theme.foreground} />
-                            <Text style={styles.sectionTitle}>Call Parameters</Text>
-                            <ChevronRight size={12} color={theme.mutedForeground} />
-                        </View>
-
-                        <View>
-                            {Object.entries(payload).map(([key, value]) => (
-                                <View key={key} style={styles.parameterItem}>
-                                    <View style={styles.parameterLeft}>
-                                        <View style={styles.parameterDot} />
-                                        <Text style={styles.parameterKey}>{key}</Text>
-                                    </View>
-                                    <Text style={styles.parameterValue} numberOfLines={1}>
-                                        {typeof value === 'string' ? `"${value}"` : String(value)}
-                                    </Text>
-                                </View>
-                            ))}
-                        </View>
-
-                        <TouchableOpacity
-                            style={styles.jsonToggle}
-                            onPress={() => setShowRawJSON(!showRawJSON)}
+                        <Card
+                            style={{
+                                backgroundColor: mutedBg,
+                                borderColor: theme.destructive,
+                            }}
+                            bordered
+                            elevated={false}
                         >
-                            <Code size={16} color={theme.foreground} />
-                            <Text style={styles.jsonToggleText}>Raw JSON</Text>
-                            <ChevronRight
-                                size={12}
-                                color={theme.mutedForeground}
-                                style={{
-                                    transform: [{ rotate: showRawJSON ? '90deg' : '0deg' }]
-                                }}
-                            />
-                        </TouchableOpacity>
-
-                        {showRawJSON && (
-                            <View style={styles.jsonContainer}>
-                                <Text style={styles.jsonText}>
-                                    {JSON.stringify(payload, null, 2)}
-                                </Text>
-                            </View>
-                        )}
+                            <CardContent style={{ padding: 0 }}>
+                                <Body style={styles.errorText}>{output}</Body>
+                            </CardContent>
+                        </Card>
                     </View>
                 )}
 
+                {/* Parameters Section */}
+                {hasPayload && (
+                    <View style={styles.section}>
+                        <View style={styles.sectionTitle}>
+                            <Settings size={16} color={theme.foreground} />
+                            <Body style={styles.sectionTitleText}>Call Parameters</Body>
+                        </View>
+                        <Card
+                            style={{
+                                backgroundColor: mutedBg,
+                                borderColor: theme.muted,
+                            }}
+                            bordered
+                            elevated={false}
+                        >
+                            <CardContent style={{ padding: 0 }}>
+                                {Object.entries(payload).map(([key, value]) => (
+                                    <View key={key} style={styles.parameterItem}>
+                                        <View style={styles.parameterLeft}>
+                                            <View style={styles.parameterDot} />
+                                            <Body style={styles.parameterKey}>{key}</Body>
+                                        </View>
+                                        <Caption style={styles.parameterValue} numberOfLines={1}>
+                                            {typeof value === 'string' ? `"${value}"` : String(value)}
+                                        </Caption>
+                                    </View>
+                                ))}
+
+                                <TouchableOpacity
+                                    style={styles.jsonToggle}
+                                    onPress={() => setShowRawJSON(!showRawJSON)}
+                                >
+                                    <Code size={16} color={theme.foreground} />
+                                    <Body style={styles.jsonToggleText}>Raw JSON</Body>
+                                    <ChevronRight
+                                        size={12}
+                                        color={theme.mutedForeground}
+                                        style={{
+                                            transform: [{ rotate: showRawJSON ? '90deg' : '0deg' }]
+                                        }}
+                                    />
+                                </TouchableOpacity>
+
+                                {showRawJSON && (
+                                    <View style={styles.jsonContainer}>
+                                        <Body style={styles.jsonText}>
+                                            {JSON.stringify(payload, null, 2)}
+                                        </Body>
+                                    </View>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </View>
+                )}
+
+                {/* Empty State */}
                 {!serviceName && !route && !hasPayload && (
                     <View style={styles.emptyState}>
-                        <View style={styles.emptyIcon}>
-                            <Database size={24} color={theme.mutedForeground} />
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Database size={48} color={theme.mutedForeground} />
+                        <View style={styles.emptyDescription}>
                             <ActivityIndicator size="small" color={theme.mutedForeground} />
-                            <Text style={styles.emptyText}>
+                            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
                                 Will be populated when the call is executed...
-                            </Text>
+                            </Body>
                         </View>
                     </View>
                 )}
-            </View>
+            </ScrollView>
         );
     };
 
     return (
         <View style={styles.container}>
-            {isStreaming ? (
-                renderLoadingState()
-            ) : (
-                <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                    <View style={styles.content}>
-                        {renderContent()}
-                    </View>
-                </ScrollView>
-            )}
+            {isStreaming ? renderLoadingState() : renderContent()}
         </View>
     );
 } 

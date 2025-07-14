@@ -6,6 +6,7 @@ import { CodeRenderer } from './CodeRenderer';
 interface MarkdownRendererProps {
     content: string;
     style?: any;
+    noScrollView?: boolean;
 }
 
 // Process Unicode escape sequences in content
@@ -28,7 +29,7 @@ const processUnicodeContent = (content: string): string => {
     });
 };
 
-export function MarkdownRenderer({ content, style }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, style, noScrollView = false }: MarkdownRendererProps) {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const theme = Colors[colorScheme ?? 'light'];
@@ -439,6 +440,27 @@ export function MarkdownRenderer({ content, style }: MarkdownRendererProps) {
                     </View>
                 );
             case 'code':
+                if (noScrollView) {
+                    return (
+                        <View key={element.key} style={{
+                            marginVertical: 8,
+                            backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
+                            borderRadius: 8,
+                            padding: 16,
+                            borderWidth: 1,
+                            borderColor: isDark ? '#404040' : '#e9ecef'
+                        }}>
+                            <Text style={{
+                                fontFamily: 'monospace',
+                                fontSize: 14,
+                                color: theme.foreground,
+                                lineHeight: 20
+                            }}>
+                                {element.content}
+                            </Text>
+                        </View>
+                    );
+                }
                 return (
                     <View key={element.key} style={{ marginVertical: 8 }}>
                         <CodeRenderer
@@ -488,13 +510,23 @@ export function MarkdownRenderer({ content, style }: MarkdownRendererProps) {
 
     const elements = parseMarkdown(processedContent);
 
+    const renderContent = () => elements.map(renderElement);
+
+    if (noScrollView) {
+        return (
+            <View style={[{ flex: 1, backgroundColor: theme.background, padding: 16 }, style]}>
+                {renderContent()}
+            </View>
+        );
+    }
+
     return (
         <ScrollView
             style={[{ flex: 1, backgroundColor: theme.background }, style]}
             contentContainerStyle={{ padding: 16 }}
             showsVerticalScrollIndicator={true}
         >
-            {elements.map(renderElement)}
+            {renderContent()}
         </ScrollView>
     );
 } 

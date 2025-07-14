@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
-import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { Colors } from '../../constants/Colors';
-import { useColorScheme } from '../../hooks/useColorScheme';
+import { useEffect } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { useTheme } from '../../hooks/useThemeColor';
 import { CodeRenderer, CsvRenderer, HtmlRenderer, MarkdownRenderer } from '../renderers';
+import { Card, CardContent } from '../ui/Card';
+import { TabSwitcher } from '../ui/TabSwitcher';
+import { useToolViewContext } from './ToolViewContext';
 import { ToolViewProps } from './ToolViewRegistry';
 
 interface FileOperationToolViewProps extends ToolViewProps {
@@ -211,12 +213,55 @@ export function FileOperationToolView({
     isSuccess = true,
     ...props
 }: FileOperationToolViewProps) {
-    const colorScheme = useColorScheme();
-    const isDark = colorScheme === 'dark';
-    const theme = Colors[colorScheme ?? 'light'];
-    const [currentView, setCurrentView] = useState<'preview' | 'source'>('preview');
+    const theme = useTheme();
+    const { currentView, setCurrentView, setHeaderExtensions } = useToolViewContext();
+
+    // Convert color-mix(in oklab, var(--muted) 20%, transparent) to hex
+    const mutedBg = theme.muted === '#e8e8e8' ? '#e8e8e833' : '#30303033';
 
     console.log('📁 FILE OPERATION TOOL RECEIVED:', !!toolContent, toolContent?.length || 0);
+
+    const {
+        filePath,
+        fileContent,
+        operation,
+        isSuccess: actualIsSuccess,
+        errorMessage
+    } = extractFileOperationData(toolCall, toolContent);
+
+    const fileName = filePath.split('/').pop() || '';
+    const fileExtension = getFileExtension(fileName);
+    const language = getLanguageFromFileName(fileName);
+    const FileIcon = getFileIcon(fileName);
+
+    const isMarkdown = isFileType.markdown(fileExtension);
+    const isHtml = isFileType.html(fileExtension);
+    const isCsv = isFileType.csv(fileExtension);
+
+    // Register header extensions for preview/source tabs
+    useEffect(() => {
+        if (operation !== 'delete' && fileContent) {
+            const tabs = [
+                { id: 'preview', label: 'Preview', icon: 'eye' as const },
+                { id: 'source', label: 'Source', icon: 'code' as const }
+            ];
+
+            setHeaderExtensions(
+                <TabSwitcher
+                    tabs={tabs}
+                    activeTab={currentView}
+                    onTabChange={(tabId) => setCurrentView(tabId as 'preview' | 'source')}
+                />
+            );
+        } else {
+            setHeaderExtensions(null);
+        }
+
+        // Cleanup on unmount
+        return () => {
+            setHeaderExtensions(null);
+        };
+    }, [operation, fileContent, currentView, setHeaderExtensions, setCurrentView]);
 
     if (!toolContent && !isStreaming) {
         console.log('❌ FILE OPERATION TOOL: NO CONTENT');
@@ -229,10 +274,9 @@ export function FileOperationToolView({
                 backgroundColor: theme.background,
             }}>
                 <Text style={{
-                    color: theme.foreground,
+                    color: theme.mutedForeground,
                     fontSize: 16,
                     textAlign: 'center',
-                    opacity: 0.7
                 }}>
                     No file operation data available
                 </Text>
@@ -240,146 +284,17 @@ export function FileOperationToolView({
         );
     }
 
-    const {
-        filePath,
-        fileContent,
-        operation,
-        isSuccess: actualIsSuccess,
-        errorMessage
-    } = extractFileOperationData(toolCall, toolContent);
-
     const configs = getOperationConfigs();
     const config = configs[operation as keyof typeof configs] || configs.edit;
     const IconComponent = config.icon;
-
-    const fileName = filePath.split('/').pop() || '';
-    const fileExtension = getFileExtension(fileName);
-    const language = getLanguageFromFileName(fileName);
-    const FileIcon = getFileIcon(fileName);
-
-    const isMarkdown = isFileType.markdown(fileExtension);
-    const isHtml = isFileType.html(fileExtension);
-    const isCsv = isFileType.csv(fileExtension);
-
-    const renderHeader = () => (
-        <View style={{
-            backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-            borderBottomWidth: 1,
-            borderBottomColor: isDark ? '#404040' : '#e9ecef',
-            paddingHorizontal: 16,
-            paddingVertical: 12
-        }}>
-            <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-            }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
-                        backgroundColor: config.bgColor,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 12
-                    }}>
-                        <Ionicons
-                            name={IconComponent}
-                            size={20}
-                            color={config.color}
-                        />
-                    </View>
-                    <View>
-                        <Text style={{
-                            fontSize: 16,
-                            fontWeight: '600',
-                            color: theme.foreground
-                        }}>
-                            {operation.charAt(0).toUpperCase() + operation.slice(1)} File
-                        </Text>
-                        {filePath && (
-                            <Text style={{
-                                fontSize: 12,
-                                color: theme.foreground,
-                                opacity: 0.7,
-                                fontFamily: 'monospace'
-                            }}>
-                                {filePath}
-                            </Text>
-                        )}
-                    </View>
-                </View>
-
-                {operation !== 'delete' && fileContent && (
-                    <View style={{
-                        flexDirection: 'row',
-                        backgroundColor: isDark ? '#404040' : '#e9ecef',
-                        borderRadius: 8,
-                        padding: 2
-                    }}>
-                        <TouchableOpacity
-                            onPress={() => setCurrentView('preview')}
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                paddingHorizontal: 12,
-                                paddingVertical: 6,
-                                borderRadius: 6,
-                                backgroundColor: currentView === 'preview' ? (isDark ? '#555' : '#fff') : 'transparent'
-                            }}
-                        >
-                            <Ionicons
-                                name="eye"
-                                size={16}
-                                color={currentView === 'preview' ? config.color : theme.foreground}
-                            />
-                            <Text style={{
-                                fontSize: 12,
-                                color: currentView === 'preview' ? config.color : theme.foreground,
-                                marginLeft: 4
-                            }}>
-                                Preview
-                            </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => setCurrentView('source')}
-                            style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                paddingHorizontal: 12,
-                                paddingVertical: 6,
-                                borderRadius: 6,
-                                backgroundColor: currentView === 'source' ? (isDark ? '#555' : '#fff') : 'transparent'
-                            }}
-                        >
-                            <Ionicons
-                                name="code"
-                                size={16}
-                                color={currentView === 'source' ? config.color : theme.foreground}
-                            />
-                            <Text style={{
-                                fontSize: 12,
-                                color: currentView === 'source' ? config.color : theme.foreground,
-                                marginLeft: 4
-                            }}>
-                                Source
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-            </View>
-        </View>
-    );
 
     const renderLoadingState = () => (
         <View style={{
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: theme.background,
-            paddingHorizontal: 32,
-            paddingVertical: 48
+            padding: 48,
+            backgroundColor: theme.card,
         }}>
             <View style={{
                 width: 80,
@@ -406,8 +321,7 @@ export function FileOperationToolView({
             </Text>
             <Text style={{
                 fontSize: 14,
-                color: theme.foreground,
-                opacity: 0.7,
+                color: theme.mutedForeground,
                 textAlign: 'center',
                 fontFamily: 'monospace'
             }}>
@@ -421,9 +335,8 @@ export function FileOperationToolView({
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
-            backgroundColor: theme.background,
-            paddingHorizontal: 32,
-            paddingVertical: 48
+            padding: 48,
+            backgroundColor: theme.card,
         }}>
             <View style={{
                 width: 80,
@@ -449,28 +362,30 @@ export function FileOperationToolView({
             }}>
                 File Deleted
             </Text>
-            <View style={{
-                backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-                borderWidth: 1,
-                borderColor: isDark ? '#404040' : '#e9ecef',
-                borderRadius: 8,
-                padding: 16,
-                width: '100%',
-                maxWidth: 300
-            }}>
-                <Text style={{
-                    fontSize: 14,
-                    color: theme.foreground,
-                    fontFamily: 'monospace',
-                    textAlign: 'center'
-                }}>
-                    {filePath || 'Unknown file path'}
-                </Text>
-            </View>
+            <Card
+                style={{
+                    backgroundColor: mutedBg,
+                    borderColor: theme.muted,
+                    width: '100%',
+                    maxWidth: 300
+                }}
+                bordered
+                elevated={false}
+            >
+                <CardContent style={{ padding: 16 }}>
+                    <Text style={{
+                        fontSize: 14,
+                        color: theme.foreground,
+                        fontFamily: 'monospace',
+                        textAlign: 'center'
+                    }}>
+                        {filePath || 'Unknown file path'}
+                    </Text>
+                </CardContent>
+            </Card>
             <Text style={{
                 fontSize: 14,
-                color: theme.foreground,
-                opacity: 0.7,
+                color: theme.mutedForeground,
                 textAlign: 'center',
                 marginTop: 16
             }}>
@@ -486,19 +401,18 @@ export function FileOperationToolView({
                     flex: 1,
                     justifyContent: 'center',
                     alignItems: 'center',
-                    backgroundColor: theme.background,
-                    padding: 32
+                    padding: 32,
+                    backgroundColor: theme.card,
                 }}>
                     <Ionicons
                         name={FileIcon}
                         size={48}
-                        color={theme.foreground}
-                        style={{ marginBottom: 16, opacity: 0.5 }}
+                        color={theme.mutedForeground}
+                        style={{ marginBottom: 16 }}
                     />
                     <Text style={{
                         fontSize: 16,
-                        color: theme.foreground,
-                        opacity: 0.7,
+                        color: theme.mutedForeground,
                         textAlign: 'center'
                     }}>
                         No content to preview
@@ -509,10 +423,16 @@ export function FileOperationToolView({
 
         if (isMarkdown) {
             return (
-                <MarkdownRenderer
-                    content={fileContent}
-                    style={{ flex: 1 }}
-                />
+                <View style={{
+                    flex: 1,
+                    paddingHorizontal: 10,
+                }}>
+                    <MarkdownRenderer
+                        content={fileContent}
+                        style={{ flex: 1 }}
+                        noScrollView={true}
+                    />
+                </View>
             );
         }
 
@@ -535,25 +455,20 @@ export function FileOperationToolView({
         }
 
         return (
-            <ScrollView style={{ flex: 1 }}>
-                <View style={{
-                    backgroundColor: isDark ? '#2a2a2a' : '#f8f9fa',
-                    borderWidth: 1,
-                    borderColor: isDark ? '#404040' : '#e9ecef',
-                    borderRadius: 8,
-                    margin: 16,
-                    padding: 16
+            <View style={{
+                flex: 1,
+                backgroundColor: mutedBg,
+                padding: 24,
+            }}>
+                <Text style={{
+                    fontSize: 14,
+                    color: theme.foreground,
+                    fontFamily: 'monospace',
+                    lineHeight: 20
                 }}>
-                    <Text style={{
-                        fontSize: 14,
-                        color: theme.foreground,
-                        fontFamily: 'monospace',
-                        lineHeight: 20
-                    }}>
-                        {fileContent}
-                    </Text>
-                </View>
-            </ScrollView>
+                    {fileContent}
+                </Text>
+            </View>
         );
     };
 
@@ -564,19 +479,18 @@ export function FileOperationToolView({
                     flex: 1,
                     justifyContent: 'center',
                     alignItems: 'center',
-                    backgroundColor: theme.background,
-                    padding: 32
+                    padding: 32,
+                    backgroundColor: theme.card,
                 }}>
                     <Ionicons
                         name={FileIcon}
                         size={48}
-                        color={theme.foreground}
-                        style={{ marginBottom: 16, opacity: 0.5 }}
+                        color={theme.mutedForeground}
+                        style={{ marginBottom: 16 }}
                     />
                     <Text style={{
                         fontSize: 16,
-                        color: theme.foreground,
-                        opacity: 0.7,
+                        color: theme.mutedForeground,
                         textAlign: 'center'
                     }}>
                         No source code to display
@@ -590,34 +504,22 @@ export function FileOperationToolView({
                 content={fileContent}
                 language={language}
                 showLineNumbers={true}
-                style={{ flex: 1, margin: 16 }}
+                style={{ flex: 1 }}
             />
         );
     };
 
     return (
-        <View style={{
-            flex: 1,
-            backgroundColor: theme.background,
-            borderWidth: 1,
-            borderColor: isDark ? '#404040' : '#e9ecef',
-            borderRadius: 8,
-            overflow: 'hidden'
-        }}>
-            {renderHeader()}
-
-            <View style={{ flex: 1 }}>
-                {isStreaming && !fileContent ? (
-                    renderLoadingState()
-                ) : operation === 'delete' ? (
-                    renderDeleteOperation()
-                ) : currentView === 'preview' ? (
-                    renderPreview()
-                ) : (
-                    renderSource()
-                )}
-            </View>
-
+        <View style={{ flex: 1 }}>
+            {isStreaming && !fileContent ? (
+                renderLoadingState()
+            ) : operation === 'delete' ? (
+                renderDeleteOperation()
+            ) : currentView === 'preview' ? (
+                renderPreview()
+            ) : (
+                renderSource()
+            )}
             {isStreaming && fileContent && (
                 <View style={{
                     position: 'absolute',

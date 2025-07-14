@@ -1,8 +1,8 @@
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useTheme } from '@/hooks/useThemeColor';
 import { AlertTriangle, ExternalLink, Monitor } from 'lucide-react-native';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Caption } from '../Typography';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Body, Caption } from '../Typography';
+import { Card, CardContent } from '../ui/Card';
 import { ToolViewProps } from './ToolViewRegistry';
 
 interface ExposePortToolViewProps extends ToolViewProps {
@@ -98,7 +98,12 @@ export function ExposePortToolView({
     ...props
 }: ExposePortToolViewProps) {
     const theme = useTheme();
-    const colorScheme = useColorScheme();
+
+    // Convert color-mix(in oklab, var(--muted) 20%, transparent) to hex
+    const mutedBg = theme.muted === '#e8e8e8' ? '#e8e8e833' : '#30303033';
+
+    // Link colors based on theme
+    const linkColor = theme.background === '#ffffff' ? '#155dfc' : '#51a2ff';
 
     const extractedData = extractExposePortData(toolCall, toolContent);
     const { port, url, message, isSuccess: actualIsSuccess, errorMessage } = extractedData;
@@ -107,56 +112,46 @@ export function ExposePortToolView({
         container: {
             flex: 1,
             backgroundColor: theme.background,
-        },
-        scrollView: {
-            flex: 1,
-        },
-        content: {
             padding: 16,
         },
         loadingContainer: {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
-            padding: 20,
+            gap: 16,
         },
-        loadingText: {
-            marginTop: 12,
-            color: theme.foreground,
-            fontSize: 16,
+        emptyState: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 16,
         },
-        urlContainer: {
-            backgroundColor: colorScheme === 'dark' ? '#1a1a1a' : '#f8f9fa',
-            borderRadius: 8,
-            padding: 16,
+        section: {
             marginBottom: 16,
-            borderWidth: 1,
-            borderColor: colorScheme === 'dark' ? '#333' : '#e1e5e9',
         },
-        urlLabel: {
-            color: theme.foreground,
-            fontSize: 14,
-            fontWeight: '600',
+        sectionTitle: {
+            flexDirection: 'row',
+            alignItems: 'center',
             marginBottom: 8,
+            gap: 8,
+        },
+        sectionTitleText: {
+            color: theme.foreground,
+            fontWeight: '600' as const,
         },
         urlLinkContainer: {
             flexDirection: 'row',
             alignItems: 'center',
+            gap: 8,
             marginBottom: 12,
-            flexWrap: 'wrap',
         },
         urlText: {
-            color: '#007AFF',
-            fontSize: 16,
-            fontWeight: '500',
+            color: linkColor,
+            fontWeight: '500' as const,
             flex: 1,
-            marginRight: 8,
-        },
-        urlIcon: {
-            marginLeft: 4,
         },
         portBadge: {
-            backgroundColor: colorScheme === 'dark' ? '#2a2a2a' : '#e8e8e8',
+            backgroundColor: theme.muted,
             paddingHorizontal: 12,
             paddingVertical: 6,
             borderRadius: 16,
@@ -166,80 +161,46 @@ export function ExposePortToolView({
         portText: {
             color: theme.foreground,
             fontSize: 12,
-            fontWeight: '500',
-            fontFamily: 'Monaco, monospace',
+            fontWeight: '500' as const,
+            fontFamily: 'monospace',
         },
         message: {
             color: theme.foreground,
-            fontSize: 14,
             marginBottom: 12,
             lineHeight: 20,
         },
-        warning: {
-            backgroundColor: colorScheme === 'dark' ? '#332800' : '#fff3cd',
-            borderColor: colorScheme === 'dark' ? '#664d00' : '#ffeaa7',
-            borderWidth: 1,
-            borderRadius: 8,
-            padding: 12,
+        warningContainer: {
             flexDirection: 'row',
             alignItems: 'flex-start',
-        },
-        warningIcon: {
-            marginRight: 8,
-            marginTop: 2,
+            gap: 8,
+            marginTop: 8,
         },
         warningText: {
-            color: colorScheme === 'dark' ? '#ffd93d' : '#856404',
+            color: '#F59E0B',
             fontSize: 12,
             flex: 1,
             lineHeight: 16,
         },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            paddingHorizontal: 40,
-            paddingVertical: 60,
-        },
-        emptyIcon: {
-            marginBottom: 16,
-        },
-        emptyTitle: {
-            color: theme.foreground,
-            fontSize: 18,
-            fontWeight: '600',
-            marginBottom: 8,
-            textAlign: 'center',
-        },
-        emptyDescription: {
-            color: theme.foreground,
-            fontSize: 14,
-            textAlign: 'center',
-            opacity: 0.7,
-            lineHeight: 20,
-            maxWidth: 300,
-        },
-        errorContainer: {
-            backgroundColor: colorScheme === 'dark' ? '#2d1b1b' : '#f8d7da',
-            borderColor: colorScheme === 'dark' ? '#5a2a2a' : '#f5c6cb',
-            borderWidth: 1,
-            borderRadius: 8,
-            padding: 12,
-            marginBottom: 16,
-        },
         errorText: {
-            color: colorScheme === 'dark' ? '#f87171' : '#721c24',
-            fontSize: 14,
+            color: theme.destructive,
             lineHeight: 20,
         },
     });
 
+    const handleUrlPress = (url: string) => {
+        Linking.openURL(url).catch(console.error);
+    };
+
     const renderLoadingState = () => (
         <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.primary} />
-            <Text style={styles.loadingText}>Exposing port...</Text>
+            <ActivityIndicator size="large" color={theme.secondary} />
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                Exposing port...
+            </Body>
             {port && (
-                <Caption style={{ marginTop: 8 }}>Port: {port}</Caption>
+                <Caption style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                    Port: {port}
+                </Caption>
             )}
         </View>
     );
@@ -247,8 +208,11 @@ export function ExposePortToolView({
     const renderContent = () => {
         if (!actualIsSuccess && errorMessage) {
             return (
-                <View style={styles.errorContainer}>
-                    <Text style={styles.errorText}>{errorMessage}</Text>
+                <View style={styles.emptyState}>
+                    <AlertTriangle size={48} color={theme.destructive} />
+                    <Body style={[styles.errorText, { textAlign: 'center' }]}>
+                        {errorMessage}
+                    </Body>
                 </View>
             );
         }
@@ -256,68 +220,70 @@ export function ExposePortToolView({
         if (!port && !url) {
             return (
                 <View style={styles.emptyState}>
-                    <Monitor
-                        size={40}
-                        color={theme.foreground}
-                        style={styles.emptyIcon}
-                    />
-                    <Text style={styles.emptyTitle}>No Port Information</Text>
-                    <Text style={styles.emptyDescription}>
+                    <Monitor size={48} color={theme.mutedForeground} />
+                    <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                        No Port Information
+                    </Body>
+                    <Caption style={{ color: theme.mutedForeground, textAlign: 'center' }}>
                         No port exposure information is available yet. Use the expose-port command to share a local port.
-                    </Text>
+                    </Caption>
                 </View>
             );
         }
 
         return (
-            <View>
+            <ScrollView style={{ flex: 1 }}>
                 {url && (
-                    <View style={styles.urlContainer}>
-                        <Text style={styles.urlLabel}>Exposed URL</Text>
-                        <TouchableOpacity
-                            style={styles.urlLinkContainer}
-                            onPress={() => {
-                                // Handle URL opening - would need to implement based on your app's URL handling
-                                console.log('Opening URL:', url);
-                            }}
-                        >
-                            <Text style={styles.urlText}>{url}</Text>
-                            <ExternalLink size={14} color="#007AFF" style={styles.urlIcon} />
-                        </TouchableOpacity>
-
-                        {port && (
-                            <View style={styles.portBadge}>
-                                <Text style={styles.portText}>Port: {port}</Text>
-                            </View>
-                        )}
-
-                        {message && (
-                            <Text style={styles.message}>{message}</Text>
-                        )}
-
-                        <View style={styles.warning}>
-                            <AlertTriangle size={16} color={styles.warningText.color} style={styles.warningIcon} />
-                            <Text style={styles.warningText}>
-                                This URL might only be temporarily available and could expire after some time.
-                            </Text>
+                    <View style={styles.section}>
+                        <View style={styles.sectionTitle}>
+                            <ExternalLink size={16} color={theme.foreground} />
+                            <Body style={styles.sectionTitleText}>Exposed URL</Body>
                         </View>
+                        <Card
+                            style={{
+                                backgroundColor: mutedBg,
+                                borderColor: theme.muted,
+                            }}
+                            bordered
+                            elevated={false}
+                        >
+                            <CardContent style={{ padding: 0 }}>
+                                <TouchableOpacity
+                                    style={styles.urlLinkContainer}
+                                    onPress={() => handleUrlPress(url)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Body style={styles.urlText} numberOfLines={2}>{url}</Body>
+                                    <ExternalLink size={16} color={linkColor} />
+                                </TouchableOpacity>
+
+                                {port && (
+                                    <View style={styles.portBadge}>
+                                        <Caption style={styles.portText}>Port: {port}</Caption>
+                                    </View>
+                                )}
+
+                                {message && (
+                                    <Body style={styles.message}>{message}</Body>
+                                )}
+
+                                <View style={styles.warningContainer}>
+                                    <AlertTriangle size={16} color="#F59E0B" />
+                                    <Caption style={styles.warningText}>
+                                        This URL might only be temporarily available and could expire after some time.
+                                    </Caption>
+                                </View>
+                            </CardContent>
+                        </Card>
                     </View>
                 )}
-            </View>
+            </ScrollView>
         );
     };
 
     return (
         <View style={styles.container}>
-            {isStreaming ? (
-                renderLoadingState()
-            ) : (
-                <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                    <View style={styles.content}>
-                        {renderContent()}
-                    </View>
-                </ScrollView>
-            )}
+            {isStreaming ? renderLoadingState() : renderContent()}
         </View>
     );
 } 

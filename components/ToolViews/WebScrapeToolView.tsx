@@ -8,10 +8,11 @@ import {
     Linking,
     ScrollView,
     StyleSheet,
-    Text,
     TouchableOpacity,
     View
 } from 'react-native';
+import { Body, Caption } from '../Typography';
+import { Card, CardContent } from '../ui/Card';
 import { ToolViewProps } from './ToolViewRegistry';
 
 export interface WebScrapeToolViewProps extends ToolViewProps {
@@ -141,25 +142,156 @@ export const WebScrapeToolView: React.FC<WebScrapeToolViewProps> = ({
     const [copiedFile, setCopiedFile] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
 
+    // Convert color-mix(in oklab, var(--muted) 20%, transparent) to hex
+    const mutedBg = theme.muted === '#e8e8e8' ? '#e8e8e833' : '#30303033';
+
+    // Link colors based on theme
+    const linkColor = theme.background === '#ffffff' ? '#155dfc' : '#51a2ff';
+
+    const styles = StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: theme.background,
+            padding: 16,
+        },
+        loadingContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 16,
+        },
+        progressContainer: {
+            width: '100%',
+            maxWidth: 300,
+            height: 4,
+            backgroundColor: theme.muted,
+            borderRadius: 2,
+            overflow: 'hidden',
+            marginTop: 16,
+        },
+        progressBar: {
+            height: '100%',
+            backgroundColor: theme.secondary,
+            borderRadius: 2,
+        },
+        section: {
+            marginBottom: 16,
+        },
+        sectionTitle: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 8,
+            gap: 8,
+        },
+        sectionTitleText: {
+            color: theme.foreground,
+            fontWeight: '600' as const,
+        },
+        urlText: {
+            color: linkColor,
+            fontFamily: 'monospace',
+        },
+        domainText: {
+            color: theme.mutedForeground,
+            fontSize: 12,
+            marginTop: 4,
+        },
+        filesHeader: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 8,
+        },
+        filesBadge: {
+            backgroundColor: theme.secondary,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 6,
+        },
+        filesBadgeText: {
+            fontSize: 12,
+            color: theme.secondaryForeground,
+            fontWeight: '500',
+        },
+        fileItemHeader: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 12,
+        },
+        fileIcon: {
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            backgroundColor: theme.muted,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        fileDetails: {
+            flex: 1,
+            gap: 8,
+        },
+        fileBadges: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+        },
+        fileBadge: {
+            borderWidth: 1,
+            borderColor: theme.muted,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            borderRadius: 20,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+        },
+        fileBadgeText: {
+            fontSize: 12,
+            color: theme.foreground,
+            fontWeight: '500',
+        },
+        fileName: {
+            color: theme.foreground,
+            fontWeight: '600' as const,
+            fontFamily: 'monospace',
+        },
+        filePath: {
+            color: theme.mutedForeground,
+            fontSize: 12,
+            fontFamily: 'monospace',
+        },
+        copyButton: {
+            padding: 8,
+            borderRadius: 8,
+            backgroundColor: theme.muted,
+        },
+        copiedButton: {
+            backgroundColor: theme.secondary,
+        },
+        emptyState: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 16,
+        },
+        emptyFilesContainer: {
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingVertical: 32,
+        },
+    });
+
     console.log('🔧 WEB SCRAPE TOOL RECEIVED:', !!toolContent, toolContent?.length || 0);
 
     if (!toolContent && !isStreaming) {
         console.log('❌ WEB SCRAPE TOOL: NO CONTENT');
         return (
-            <View style={{
-                flex: 1,
-                justifyContent: 'center',
-                alignItems: 'center',
-                padding: 20,
-                backgroundColor: theme.background,
-            }}>
-                <Text style={{
-                    color: theme.mutedForeground,
-                    fontSize: 16,
-                    textAlign: 'center',
-                }}>
-                    No web scrape data available
-                </Text>
+            <View style={styles.container}>
+                <View style={styles.emptyState}>
+                    <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                        No web scrape data available
+                    </Body>
+                </View>
             </View>
         );
     }
@@ -206,250 +338,63 @@ export const WebScrapeToolView: React.FC<WebScrapeToolViewProps> = ({
         Linking.openURL(url).catch(console.error);
     };
 
-    const styles = StyleSheet.create({
-        container: {
-            flex: 1,
-            backgroundColor: theme.background,
-        },
-        content: {
-            flex: 1,
-            padding: 16,
-        },
-        loadingContainer: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 16,
-        },
-        loadingText: {
-            fontSize: 16,
-            color: theme.mutedForeground,
-            textAlign: 'center',
-        },
-        loadingDomain: {
-            fontSize: 12,
-            color: theme.mutedForeground,
-            fontFamily: 'monospace',
-            textAlign: 'center',
-            marginTop: 8,
-        },
-        progressContainer: {
-            width: '100%',
-            maxWidth: 300,
-            height: 4,
-            backgroundColor: theme.muted,
-            borderRadius: 2,
-            overflow: 'hidden',
-            marginTop: 16,
-        },
-        progressBar: {
-            height: '100%',
-            backgroundColor: theme.secondary,
-            borderRadius: 2,
-        },
-        progressText: {
-            fontSize: 12,
-            color: theme.mutedForeground,
-            textAlign: 'center',
-            marginTop: 8,
-        },
-        sectionTitle: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: theme.foreground,
-            marginBottom: 12,
-            flexDirection: 'row',
-            alignItems: 'center',
-        },
-        urlContainer: {
-            backgroundColor: theme.card,
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-            borderWidth: 1,
-            borderColor: theme.border,
-        },
-        urlHeader: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 8,
-        },
-        urlTitle: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: theme.foreground,
-        },
-        urlText: {
-            fontSize: 14,
-            color: theme.secondary,
-            fontFamily: 'monospace',
-        },
-        domainText: {
-            fontSize: 12,
-            color: theme.mutedForeground,
-            marginTop: 4,
-        },
-        filesHeader: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 12,
-        },
-        filesTitle: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-        },
-        filesBadge: {
-            backgroundColor: theme.secondary,
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 6,
-        },
-        filesBadgeText: {
-            fontSize: 12,
-            color: theme.secondaryForeground,
-            fontWeight: '500',
-        },
-        fileItem: {
-            backgroundColor: theme.card,
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 12,
-            borderWidth: 1,
-            borderColor: theme.border,
-        },
-        fileItemHeader: {
-            flexDirection: 'row',
-            alignItems: 'flex-start',
-            gap: 12,
-        },
-        fileIcon: {
-            width: 40,
-            height: 40,
-            borderRadius: 8,
-            backgroundColor: theme.muted,
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        fileDetails: {
-            flex: 1,
-            gap: 8,
-        },
-        fileBadges: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 6,
-        },
-        fileBadge: {
-            backgroundColor: theme.secondary,
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 4,
-            flexDirection: 'row',
-            alignItems: 'center',
-        },
-        fileBadgeText: {
-            fontSize: 10,
-            color: theme.secondaryForeground,
-            fontWeight: '500',
-        },
-        fileName: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: theme.foreground,
-            fontFamily: 'monospace',
-        },
-        filePath: {
-            fontSize: 12,
-            color: theme.mutedForeground,
-            fontFamily: 'monospace',
-        },
-        copyButton: {
-            padding: 8,
-            borderRadius: 8,
-            backgroundColor: theme.muted,
-        },
-        copiedButton: {
-            backgroundColor: theme.secondary,
-        },
-        emptyState: {
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 16,
-        },
-        emptyText: {
-            fontSize: 16,
-            color: theme.mutedForeground,
-            textAlign: 'center',
-        },
-        emptySubtext: {
-            fontSize: 14,
-            color: theme.mutedForeground,
-            textAlign: 'center',
-            marginTop: 8,
-        },
-        emptyFilesContainer: {
-            justifyContent: 'center',
-            alignItems: 'center',
-            paddingVertical: 32,
-        },
-        emptyFilesText: {
-            fontSize: 14,
-            color: theme.mutedForeground,
-            textAlign: 'center',
-            marginTop: 8,
-        },
-    });
-
     const renderLoading = () => (
         <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.secondary} />
-            <Text style={styles.loadingText}>Extracting Content</Text>
-            <Text style={styles.loadingDomain}>Analyzing and processing {domain}</Text>
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                Extracting Content
+            </Body>
+            <Caption style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                Analyzing and processing {domain}
+            </Caption>
             <View style={styles.progressContainer}>
                 <View style={[styles.progressBar, { width: `${progress}%` }]} />
             </View>
-            <Text style={styles.progressText}>{progress}% complete</Text>
+            <Caption style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                {progress}% complete
+            </Caption>
         </View>
     );
 
     const renderResults = () => (
-        <ScrollView style={styles.content}>
+        <ScrollView style={{ flex: 1 }}>
             {/* URL Section */}
-            <View style={{ marginBottom: 16 }}>
-                <View style={[styles.sectionTitle, { marginBottom: 8 }]}>
+            <View style={styles.section}>
+                <View style={styles.sectionTitle}>
                     <Globe size={16} color={theme.foreground} />
-                    <Text style={[styles.sectionTitle, { marginLeft: 8, marginBottom: 0 }]}>Source URL</Text>
+                    <Body style={styles.sectionTitleText}>Source URL</Body>
                 </View>
                 <TouchableOpacity
-                    style={styles.urlContainer}
-                    onPress={() => handleLinkPress(url)}
                     activeOpacity={0.7}
+                    onPress={() => handleLinkPress(url)}
                 >
-                    <View style={styles.urlHeader}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.urlText} numberOfLines={2}>{url}</Text>
-                            <Text style={styles.domainText}>{domain}</Text>
-                        </View>
-                        <ExternalLink size={20} color={theme.mutedForeground} />
-                    </View>
+                    <Card
+                        style={{
+                            backgroundColor: mutedBg,
+                            borderColor: theme.muted,
+                        }}
+                        bordered
+                        elevated={false}
+                    >
+                        <CardContent style={{ padding: 0 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                <View style={{ flex: 1 }}>
+                                    <Body style={styles.urlText} numberOfLines={2}>{url}</Body>
+                                    <Caption style={styles.domainText}>{domain}</Caption>
+                                </View>
+                                <ExternalLink size={20} color={theme.mutedForeground} />
+                            </View>
+                        </CardContent>
+                    </Card>
                 </TouchableOpacity>
             </View>
 
             {/* Files Section */}
-            <View style={{ marginBottom: 16 }}>
+            <View style={styles.section}>
                 <View style={styles.filesHeader}>
-                    <View style={styles.filesTitle}>
+                    <View style={styles.sectionTitle}>
                         <Zap size={16} color={theme.foreground} />
-                        <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Generated Files</Text>
-                    </View>
-                    <View style={styles.filesBadge}>
-                        <Text style={styles.filesBadgeText}>
-                            {files.length} file{files.length !== 1 ? 's' : ''}
-                        </Text>
+                        <Body style={styles.sectionTitleText}>Generated Files ({files.length})</Body>
                     </View>
                 </View>
 
@@ -460,51 +405,66 @@ export const WebScrapeToolView: React.FC<WebScrapeToolViewProps> = ({
                             const isCopied = copiedFile === filePath;
 
                             return (
-                                <View key={index} style={styles.fileItem}>
-                                    <View style={styles.fileItemHeader}>
-                                        <View style={styles.fileIcon}>
-                                            <FileText size={20} color={theme.foreground} />
-                                        </View>
-
-                                        <View style={styles.fileDetails}>
-                                            <View style={styles.fileBadges}>
-                                                <View style={styles.fileBadge}>
-                                                    <Text style={styles.fileBadgeText}>JSON</Text>
-                                                </View>
-                                                {fileInfo.timestamp && (
-                                                    <View style={styles.fileBadge}>
-                                                        <Calendar size={10} color={theme.secondaryForeground} />
-                                                        <Text style={[styles.fileBadgeText, { marginLeft: 4 }]}>
-                                                            {fileInfo.timestamp.replace('_', ' ')}
-                                                        </Text>
-                                                    </View>
-                                                )}
+                                <Card
+                                    key={index}
+                                    style={{
+                                        backgroundColor: mutedBg,
+                                        borderColor: theme.muted,
+                                        marginBottom: 8,
+                                    }}
+                                    bordered
+                                    elevated={false}
+                                >
+                                    <CardContent style={{ padding: 0 }}>
+                                        <View style={styles.fileItemHeader}>
+                                            <View style={styles.fileIcon}>
+                                                <FileText size={20} color={theme.foreground} />
                                             </View>
 
-                                            <Text style={styles.fileName}>{fileInfo.fileName}</Text>
-                                            <Text style={styles.filePath} numberOfLines={1}>{fileInfo.fullPath}</Text>
-                                        </View>
+                                            <View style={styles.fileDetails}>
+                                                <View style={styles.fileBadges}>
+                                                    <View style={styles.fileBadge}>
+                                                        <Body style={styles.fileBadgeText}>JSON</Body>
+                                                    </View>
+                                                    {fileInfo.timestamp && (
+                                                        <View style={styles.fileBadge}>
+                                                            <Calendar size={12} color={theme.foreground} />
+                                                            <Body style={styles.fileBadgeText}>
+                                                                {fileInfo.timestamp.replace('_', ' ')}
+                                                            </Body>
+                                                        </View>
+                                                    )}
+                                                </View>
 
-                                        <TouchableOpacity
-                                            style={[styles.copyButton, isCopied && styles.copiedButton]}
-                                            onPress={() => copyFilePath(filePath)}
-                                            activeOpacity={0.7}
-                                        >
-                                            {isCopied ? (
-                                                <Check size={16} color={theme.secondary} />
-                                            ) : (
-                                                <Copy size={16} color={theme.foreground} />
-                                            )}
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
+                                                <Body style={styles.fileName}>{fileInfo.fileName}</Body>
+                                                <Caption style={styles.filePath} numberOfLines={1}>
+                                                    {fileInfo.fullPath}
+                                                </Caption>
+                                            </View>
+
+                                            <TouchableOpacity
+                                                style={[styles.copyButton, isCopied && styles.copiedButton]}
+                                                onPress={() => copyFilePath(filePath)}
+                                                activeOpacity={0.7}
+                                            >
+                                                {isCopied ? (
+                                                    <Check size={16} color={theme.secondary} />
+                                                ) : (
+                                                    <Copy size={16} color={theme.foreground} />
+                                                )}
+                                            </TouchableOpacity>
+                                        </View>
+                                    </CardContent>
+                                </Card>
                             );
                         })}
                     </View>
                 ) : (
                     <View style={styles.emptyFilesContainer}>
                         <FileText size={32} color={theme.mutedForeground} />
-                        <Text style={styles.emptyFilesText}>No files generated</Text>
+                        <Body style={{ color: theme.mutedForeground, textAlign: 'center', marginTop: 8 }}>
+                            No files generated
+                        </Body>
                     </View>
                 )}
             </View>
@@ -514,10 +474,12 @@ export const WebScrapeToolView: React.FC<WebScrapeToolViewProps> = ({
     const renderEmpty = () => (
         <View style={styles.emptyState}>
             <Globe size={48} color={theme.mutedForeground} />
-            <Text style={styles.emptyText}>No URL Detected</Text>
-            <Text style={styles.emptySubtext}>
+            <Body style={{ color: theme.mutedForeground, textAlign: 'center' }}>
+                No URL Detected
+            </Body>
+            <Caption style={{ color: theme.mutedForeground, textAlign: 'center', marginTop: 8 }}>
                 Unable to extract a valid URL from the scraping request
-            </Text>
+            </Caption>
         </View>
     );
 

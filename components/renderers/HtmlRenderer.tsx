@@ -10,9 +10,10 @@ interface HtmlRendererProps {
     content: string;
     previewUrl?: string;
     style?: any;
+    disableToggleButtons?: boolean;
 }
 
-export function HtmlRenderer({ content, previewUrl, style }: HtmlRendererProps) {
+export function HtmlRenderer({ content, previewUrl, style, disableToggleButtons = true }: HtmlRendererProps) {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
     const theme = Colors[colorScheme ?? 'light'];
@@ -41,135 +42,6 @@ export function HtmlRenderer({ content, previewUrl, style }: HtmlRendererProps) 
         );
     }
 
-    // Create a complete HTML document with proper styling
-    const htmlDocument = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                body {
-                    margin: 0;
-                    padding: 16px;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    background-color: ${isDark ? '#121215' : '#f6f6f6'};
-                    color: ${isDark ? '#fafafa' : '#1d1c1b'};
-                    line-height: 1.6;
-                }
-                
-                h1, h2, h3, h4, h5, h6 {
-                    color: ${isDark ? '#fafafa' : '#171717'};
-                    margin-top: 1.5em;
-                    margin-bottom: 0.5em;
-                }
-                
-                h1 { font-size: 2em; }
-                h2 { font-size: 1.5em; }
-                h3 { font-size: 1.17em; }
-                h4 { font-size: 1em; }
-                h5 { font-size: 0.83em; }
-                h6 { font-size: 0.67em; }
-                
-                p {
-                    margin-bottom: 1em;
-                }
-                
-                a {
-                    color: ${isDark ? '#155dfc' : '#155dfc'};
-                    text-decoration: none;
-                }
-                
-                a:hover {
-                    text-decoration: underline;
-                }
-                
-                pre {
-                    background-color: ${isDark ? '#2a2a2a' : '#f8f9fa'};
-                    border: 1px solid ${isDark ? '#404040' : '#e9ecef'};
-                    border-radius: 4px;
-                    padding: 1em;
-                    overflow-x: auto;
-                    font-family: 'Courier New', monospace;
-                    font-size: 0.9em;
-                }
-                
-                code {
-                    background-color: ${isDark ? '#2a2a2a' : '#f8f9fa'};
-                    border: 1px solid ${isDark ? '#404040' : '#e9ecef'};
-                    border-radius: 2px;
-                    padding: 0.2em 0.4em;
-                    font-family: 'Courier New', monospace;
-                    font-size: 0.9em;
-                }
-                
-                blockquote {
-                    border-left: 4px solid ${isDark ? '#555' : '#ddd'};
-                    margin: 1em 0;
-                    padding-left: 1em;
-                    font-style: italic;
-                    background-color: ${isDark ? '#2a2a2a' : '#f8f9fa'};
-                    padding: 1em;
-                    border-radius: 4px;
-                }
-                
-                table {
-                    border-collapse: collapse;
-                    width: 100%;
-                    margin: 1em 0;
-                }
-                
-                th, td {
-                    border: 1px solid ${isDark ? '#404040' : '#e9ecef'};
-                    padding: 0.5em;
-                    text-align: left;
-                }
-                
-                th {
-                    background-color: ${isDark ? '#333' : '#f8f9fa'};
-                    font-weight: bold;
-                }
-                
-                tr:nth-child(even) {
-                    background-color: ${isDark ? '#2a2a2a' : '#f8f9fa'};
-                }
-                
-                ul, ol {
-                    margin: 1em 0;
-                    padding-left: 2em;
-                }
-                
-                li {
-                    margin-bottom: 0.5em;
-                }
-                
-                img {
-                    max-width: 100%;
-                    height: auto;
-                    border-radius: 4px;
-                }
-                
-                hr {
-                    border: none;
-                    height: 1px;
-                    background-color: ${isDark ? '#404040' : '#e9ecef'};
-                    margin: 2em 0;
-                }
-                
-                .container {
-                    max-width: 100%;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                ${content}
-            </div>
-        </body>
-        </html>
-    `;
 
     const renderToggleButtons = () => (
         <View style={{
@@ -242,7 +114,6 @@ export function HtmlRenderer({ content, previewUrl, style }: HtmlRendererProps) 
                     Code
                 </Text>
             </TouchableOpacity>
-
             {previewUrl && (
                 <TouchableOpacity
                     onPress={() => Linking.openURL(previewUrl)}
@@ -262,22 +133,20 @@ export function HtmlRenderer({ content, previewUrl, style }: HtmlRendererProps) 
                     />
                 </TouchableOpacity>
             )}
+
         </View>
     );
 
     return (
-        <View style={[{ flex: 1, backgroundColor: theme.background }, style]}>
+        <View style={[{ backgroundColor: theme.background }, style]}>
             {/* Toggle buttons */}
-            {renderToggleButtons()}
-
+            {!disableToggleButtons && renderToggleButtons()}
             {/* Content area */}
             <View style={{ flex: 1 }}>
                 {viewMode === 'preview' ? (
                     <WebView
-                        source={{ html: htmlDocument }}
+                        source={{ html: content }}
                         style={{
-                            flex: 1,
-                            backgroundColor: theme.background,
                         }}
                         showsVerticalScrollIndicator={true}
                         showsHorizontalScrollIndicator={false}
@@ -289,7 +158,6 @@ export function HtmlRenderer({ content, previewUrl, style }: HtmlRendererProps) 
                         startInLoadingState={true}
                         renderLoading={() => (
                             <View style={{
-                                flex: 1,
                                 justifyContent: 'center',
                                 alignItems: 'center',
                                 backgroundColor: theme.background
