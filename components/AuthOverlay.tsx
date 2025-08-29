@@ -1,6 +1,6 @@
 import { fontWeights } from '@/constants/Fonts';
 import { supabase } from '@/constants/SupabaseConfig';
-import { useThemedStyles } from '@/hooks/useThemeColor';
+import { useTheme } from '@/hooks/useThemeColor';
 import React, { useState } from 'react';
 import {
     Alert,
@@ -8,11 +8,13 @@ import {
     Linking,
     Modal,
     Platform,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
+import { Card } from './ui/Card';
 
 interface AuthOverlayProps {
     visible: boolean;
@@ -28,46 +30,42 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
     const [showSuccess, setShowSuccess] = useState(false);
     const [successEmail, setSuccessEmail] = useState('');
 
-    const styles = useThemedStyles((theme) => ({
+    const theme = useTheme();
+
+    const styles = StyleSheet.create({
         overlay: {
             flex: 1,
             backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            justifyContent: 'center' as const,
-            alignItems: 'center' as const,
+            justifyContent: 'center',
+            alignItems: 'center',
             padding: 20,
-        },
-        container: {
-            backgroundColor: theme.background,
-            borderRadius: 12,
-            padding: 20,
-            width: '100%' as const,
-            maxWidth: 400,
-            borderWidth: 1,
-            borderColor: theme.border,
         },
         title: {
-            fontSize: 24,
+            fontSize: 22,
             fontFamily: fontWeights[600],
             color: theme.foreground,
-            textAlign: 'center' as const,
-            marginBottom: 20,
+            textAlign: 'center',
+            marginBottom: 16,
         },
         input: {
             borderWidth: 1,
             borderColor: theme.border,
-            borderRadius: 8,
+            borderRadius: 12,
             padding: 12,
-            marginBottom: 16,
+            height: 48,
+            marginBottom: 0,
             fontSize: 16,
             color: theme.foreground,
             backgroundColor: theme.background,
         },
         button: {
             backgroundColor: theme.primary,
-            borderRadius: 8,
-            padding: 12,
-            alignItems: 'center' as const,
-            marginBottom: 12,
+            borderRadius: 12,
+            height: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: 8,
+            marginBottom: 16,
         },
         buttonDisabled: {
             opacity: 0.6,
@@ -78,8 +76,8 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
             fontFamily: fontWeights[600],
         },
         switchButton: {
-            alignItems: 'center' as const,
-            padding: 8,
+            alignItems: 'center',
+            padding: 6,
         },
         switchText: {
             color: theme.primary,
@@ -87,10 +85,11 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
             fontFamily: fontWeights[500],
         },
         closeButton: {
-            position: 'absolute' as const,
-            top: 16,
-            right: 16,
-            padding: 8,
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            padding: 6,
+            zIndex: 1,
         },
         closeText: {
             color: theme.mutedForeground,
@@ -98,73 +97,72 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
             fontFamily: fontWeights[500],
         },
         successContainer: {
-            alignItems: 'center' as const,
-            padding: 20,
+            alignItems: 'center',
         },
         successIcon: {
-            width: 80,
-            height: 80,
-            borderRadius: 40,
+            width: 64,
+            height: 64,
+            borderRadius: 32,
             backgroundColor: '#10B981',
-            alignItems: 'center' as const,
-            justifyContent: 'center' as const,
-            marginBottom: 24,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
         },
         successIconText: {
-            fontSize: 32,
+            fontSize: 28,
             color: '#ffffff',
         },
         successTitle: {
-            fontSize: 28,
+            fontSize: 24,
             fontFamily: fontWeights[600],
             color: theme.foreground,
-            textAlign: 'center' as const,
-            marginBottom: 12,
+            textAlign: 'center',
+            marginBottom: 8,
         },
         successDescription: {
-            fontSize: 16,
+            fontSize: 15,
             color: theme.mutedForeground,
-            textAlign: 'center' as const,
-            marginBottom: 8,
-            lineHeight: 22,
+            textAlign: 'center',
+            marginBottom: 6,
+            lineHeight: 20,
         },
         successEmail: {
-            fontSize: 16,
+            fontSize: 15,
             fontFamily: fontWeights[600],
             color: theme.foreground,
-            textAlign: 'center' as const,
-            marginBottom: 24,
+            textAlign: 'center',
+            marginBottom: 16,
         },
         successNote: {
             backgroundColor: '#10B98120',
             borderColor: '#10B98140',
             borderWidth: 1,
             borderRadius: 8,
-            padding: 16,
-            marginBottom: 32,
+            padding: 12,
+            marginBottom: 20,
         },
         successNoteText: {
-            fontSize: 14,
+            fontSize: 13,
             color: '#059669',
-            textAlign: 'center' as const,
-            lineHeight: 20,
+            textAlign: 'center',
+            lineHeight: 18,
         },
         successButtonContainer: {
-            width: '100%' as const,
-            gap: 12,
+            width: '100%',
+            gap: 8,
         },
         legalText: {
-            fontSize: 12,
+            fontSize: 11,
             color: theme.mutedForeground,
-            textAlign: 'center' as const,
-            marginTop: 20,
-            lineHeight: 16,
-            paddingHorizontal: 8,
+            textAlign: 'center',
+            marginTop: 12,
+            lineHeight: 14,
+            paddingHorizontal: 4,
         },
         legalLink: {
             color: theme.primary,
         },
-    }));
+    });
 
     const handleAuth = async () => {
         if (!email.trim()) {
@@ -283,7 +281,17 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.overlay}
             >
-                <View style={styles.container}>
+                <Card
+                    style={{
+                        width: '100%',
+                        maxWidth: 400,
+                        position: 'relative',
+                        padding: 16,
+                        gap: 16,
+                    }}
+                    bordered
+                    elevated
+                >
                     <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
                         <Text style={styles.closeText}>✕</Text>
                     </TouchableOpacity>
@@ -314,10 +322,10 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.button, { backgroundColor: 'transparent', borderWidth: 1, borderColor: styles.button.backgroundColor }]}
+                                    style={[styles.button, { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme.primary }]}
                                     onPress={handleClose}
                                 >
-                                    <Text style={[styles.buttonText, { color: styles.button.backgroundColor }]}>Close</Text>
+                                    <Text style={[styles.buttonText, { color: theme.primary }]}>Close</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -330,7 +338,7 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                             <TextInput
                                 style={styles.input}
                                 placeholder="Email"
-                                placeholderTextColor={styles.closeText.color}
+                                placeholderTextColor={theme.mutedForeground}
                                 value={email}
                                 onChangeText={setEmail}
                                 keyboardType="email-address"
@@ -342,7 +350,7 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                                 <TextInput
                                     style={styles.input}
                                     placeholder="Password"
-                                    placeholderTextColor={styles.closeText.color}
+                                    placeholderTextColor={theme.mutedForeground}
                                     value={password}
                                     onChangeText={setPassword}
                                     secureTextEntry
@@ -355,7 +363,7 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                                 <TextInput
                                     style={styles.input}
                                     placeholder="Confirm Password"
-                                    placeholderTextColor={styles.closeText.color}
+                                    placeholderTextColor={theme.mutedForeground}
                                     value={confirmPassword}
                                     onChangeText={setConfirmPassword}
                                     secureTextEntry
@@ -416,7 +424,7 @@ export const AuthOverlay: React.FC<AuthOverlayProps> = ({ visible, onClose }) =>
                             </View>
                         </>
                     )}
-                </View>
+                </Card>
             </KeyboardAvoidingView>
         </Modal>
     );

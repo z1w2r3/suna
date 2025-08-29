@@ -14,7 +14,6 @@ import {
     useSetLeftPanelVisible,
     useSetRightPanelVisible
 } from '@/stores/ui-store';
-import React from 'react';
 import { View } from 'react-native';
 
 export default function HomeScreen() {
