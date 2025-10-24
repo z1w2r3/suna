@@ -355,10 +355,10 @@ class Configuration:
     STRIPE_PRODUCT_ID_PROD: Optional[str] = 'prod_SCl7AQ2C8kK1CD'
     STRIPE_PRODUCT_ID_STAGING: Optional[str] = 'prod_SCgIj3G7yPOAWY'
     
-    # Sandbox configuration
-    SANDBOX_IMAGE_NAME = "kortix/suna:0.1.3.23"
-    SANDBOX_SNAPSHOT_NAME = "kortix/suna:0.1.3.23"
-    SANDBOX_ENTRYPOINT = "/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf"
+    # Sandbox configuration (can be overridden via environment variables)
+    SANDBOX_IMAGE_NAME: str = "kortix/suna:0.1.3.23"
+    SANDBOX_SNAPSHOT_NAME: str = "kortix/suna:0.1.3.23"
+    SANDBOX_ENTRYPOINT: str = "/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf"
 
     # LangFuse configuration
     LANGFUSE_PUBLIC_KEY: Optional[str] = None

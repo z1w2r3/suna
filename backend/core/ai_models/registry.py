@@ -6,7 +6,7 @@ FREE_MODEL_ID = "moonshotai/kimi-k2"
 
 # Set premium model ID based on environment
 if config.ENV_MODE == EnvMode.LOCAL:
-    PREMIUM_MODEL_ID = "anthropic/claude-sonnet-4-20250514"
+    PREMIUM_MODEL_ID = "openai-compatible/glm-4.6"
 else:  # STAGING or PRODUCTION
     PREMIUM_MODEL_ID = "bedrock/anthropic.claude-sonnet-4-20250514-v1:0"
 
@@ -199,8 +199,29 @@ class ModelRegistry:
             priority=95,
             enabled=True
         ))
-        
-        
+
+        # Zhipu GLM Models
+        self.register(Model(
+            id="openai-compatible/glm-4.6",
+            name="GLM-4.6",
+            provider=ModelProvider.OPENAI,
+            aliases=["glm-4.6", "GLM-4.6", "zhipuai/glm-4.6"],
+            context_window=128_000,
+            capabilities=[
+                ModelCapability.CHAT,
+                ModelCapability.FUNCTION_CALLING,
+                ModelCapability.VISION,
+            ],
+            pricing=ModelPricing(
+                input_cost_per_million_tokens=0.10,
+                output_cost_per_million_tokens=0.10
+            ),
+            tier_availability=["free", "paid"],
+            priority=85,
+            recommended=True,
+            enabled=True
+        ))
+
         # self.register(Model(
         #     id="openrouter/moonshotai/kimi-k2",
         #     name="Kimi K2",

@@ -706,9 +706,8 @@ export const startAgent = async (
       );
     }
 
-    const defaultOptions = {
-      model_name: 'anthropic/claude-3-7-sonnet-latest',
-    };
+    // Don't set a default model_name - let the backend use the agent's configured model
+    const defaultOptions = {};
 
     const finalOptions = { ...defaultOptions, ...options };
 

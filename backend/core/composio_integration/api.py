@@ -564,24 +564,25 @@ async def get_toolkit_icon(
     try:
         toolkit_service = ToolkitService()
         icon_url = await toolkit_service.get_toolkit_icon(toolkit_slug)
-        
-        if icon_url:
-            return {
-                "success": True,
-                "toolkit_slug": toolkit_slug,
-                "icon_url": icon_url
-            }
-        else:
-            return {
-                "success": False,
-                "toolkit_slug": toolkit_slug,
-                "icon_url": None,
-                "message": "Icon not found"
-            }
-    
+
+        # Always return success: True with icon_url (can be None)
+        # This prevents 500 errors when Composio is not configured
+        return {
+            "success": True,
+            "toolkit_slug": toolkit_slug,
+            "icon_url": icon_url,
+            "message": "Icon fetched successfully" if icon_url else "Icon not available (Composio not configured or icon not found)"
+        }
+
     except Exception as e:
-        logger.error(f"Error getting toolkit icon: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error(f"Error getting toolkit icon: {e}", exc_info=True)
+        # Return success with null icon instead of 500 error
+        return {
+            "success": True,
+            "toolkit_slug": toolkit_slug,
+            "icon_url": None,
+            "message": f"Error fetching icon: {str(e)}"
+        }
 
 
 @router.post("/tools/list")

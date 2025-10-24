@@ -238,7 +238,11 @@ export function HeroSection() {
         formData.append('files', file, normalizedName);
       });
 
-      if (options?.model_name) formData.append('model_name', options.model_name);
+      // Don't send model_name for default agent, let backend use agent's configured model
+      // Only send model_name if user has explicitly selected a non-default agent
+      if (options?.model_name && selectedAgentId) {
+        formData.append('model_name', options.model_name);
+      }
       formData.append('stream', 'true'); // Always stream for better UX
       formData.append('enable_context_manager', 'false');
 

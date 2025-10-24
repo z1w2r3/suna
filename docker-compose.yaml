@@ -28,7 +28,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
       - ./backend/services/docker/redis.conf:/usr/local/etc/redis/redis.conf:ro
@@ -84,7 +84,16 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3001:3000"
+    volumes:
+      - ./frontend/.env.local:/app/.env.local:ro
+    environment:
+      - NEXT_PUBLIC_ENV_MODE=local
+      - NEXT_PUBLIC_SUPABASE_URL=http://192.168.50.117:54321
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      - NEXT_PUBLIC_BACKEND_URL=http://192.168.50.117:8000/api
+      - NEXT_PUBLIC_URL=http://localhost:3001
+      - KORTIX_ADMIN_API_KEY=9f30cfa969877629cf03bdd11b4c79cd5179679e82c39c3d17680d34067080f3
     depends_on:
       - backend
 

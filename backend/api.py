@@ -138,6 +138,10 @@ allow_origin_regex = None
 if config.ENV_MODE == EnvMode.LOCAL:
     allowed_origins.append("http://localhost:3000")
     allowed_origins.append("http://127.0.0.1:3000")
+    allowed_origins.append("http://localhost:3001")
+    allowed_origins.append("http://127.0.0.1:3001")
+    allowed_origins.append("http://192.168.50.117:3001")  # Local network access
+    allowed_origins.append("http://192.168.50.117:8000")  # Backend API access
 
 # Add staging-specific origins
 if config.ENV_MODE == EnvMode.STAGING:

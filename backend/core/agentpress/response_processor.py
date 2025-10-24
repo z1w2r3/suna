@@ -1548,7 +1548,8 @@ class ResponseProcessor:
                     logger.error(f"❌ Tool returned invalid result type: {type(result)}")
                     result = ToolResult(success=False, output=f"Tool returned invalid result type: {type(result)}")
 
-            span.end(status_message="tool_executed", output=str(result))
+            if span:
+                span.end(status_message="tool_executed", output=str(result))
             return result
 
         except Exception as e:
@@ -1556,7 +1557,8 @@ class ResponseProcessor:
             logger.error(f"❌ Error type: {type(e).__name__}")
             logger.error(f"❌ Tool call data: {tool_call}")
             logger.error(f"❌ Full traceback:", exc_info=True)
-            span.end(status_message="critical_error", output=str(e), level="ERROR")
+            if span:
+                span.end(status_message="critical_error", output=str(e), level="ERROR")
             return ToolResult(success=False, output=f"Critical error executing tool: {str(e)}")
 
     async def _execute_tools(
@@ -2067,7 +2069,15 @@ class ResponseProcessor:
 
     async def _yield_and_save_tool_error(self, context: ToolExecutionContext, thread_id: str, thread_run_id: str) -> Optional[Dict[str, Any]]:
         """Formats, saves, and returns a tool error status message."""
-        error_msg = str(context.error) if context.error else "Unknown error during tool execution"
+        # Ensure error_msg is always a string, even if context.error is a list or other type
+        if context.error:
+            if isinstance(context.error, (list, tuple)):
+                error_msg = ", ".join(str(item) for item in context.error)
+            else:
+                error_msg = str(context.error)
+        else:
+            error_msg = "Unknown error during tool execution"
+
         tool_name = context.xml_tag_name or context.function_name
         content = {
             "role": "assistant", "status_type": "tool_error",

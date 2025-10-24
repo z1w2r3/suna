@@ -75,7 +75,11 @@ class ToolsListResponse(BaseModel):
 
 class ToolkitService:
     def __init__(self, api_key: Optional[str] = None):
-        self.client = ComposioClient.get_client(api_key)
+        try:
+            self.client = ComposioClient.get_client(api_key)
+        except ValueError as e:
+            logger.warning(f"Composio client initialization failed: {e}. Composio features will be disabled.")
+            self.client = None
     
     async def list_categories(self) -> List[CategoryInfo]:
         try:
@@ -247,6 +251,11 @@ class ToolkitService:
     
     async def get_toolkit_icon(self, toolkit_slug: str) -> Optional[str]:
         try:
+            # Check if Composio client is available
+            if self.client is None:
+                logger.debug(f"Composio client not available, skipping icon fetch for {toolkit_slug}")
+                return None
+
             # logger.debug(f"Fetching toolkit icon for: {toolkit_slug}")
             toolkit_response = self.client.toolkits.retrieve(toolkit_slug)
             
